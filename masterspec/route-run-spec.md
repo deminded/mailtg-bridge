@@ -107,3 +107,77 @@ adr-/dr-, не возникло. Модель конкуренции (MAJOR-007)
 
 ## Кто принял
 <!-- заполняется человеком на гейте: merge PR, кем, когда -->
+
+## Fold GLM blind-verify (spec) (12.07): свёртка adversarially-triaged дефектов
+Независимый blind-verify GLM-4 (`verify-report-spec-glm.md`, 6 MAJOR + 7 MINOR, 0 CRITICAL) сверен
+оркестратором с артефактами; свёрнуты ТОЛЬКО подтверждённые пункты, read-artifact'ы GLM (cmp-tg-gateway —
+permission denied) понижены, edge-case без решения для codegen отданы реализации. Полный per-finding
+вердикт — `verify-response-spec.md`. Режим — ПРАВКА in-place (слой ещё draft). Новых артефактов 0; набор
+артефактов, список capabilities и число терминов глоссария (23) не изменились → индекс не тронут.
+
+### Импакт по свёрнутым пунктам
+- MAJOR-003 (приоритет, correctness): курсор = монотонный high-watermark по выбранным в такте id;
+  удалённые/отсутствующие id толерируются, НИКОГДА не стопорят последующие. alg-batch-per-dialog-cycle
+  (правило 5/7 + инвариант), alg-dedup-idempotency (правило 1), data-bridge-store (last_id, state-матрица, нота).
+- MAJOR-006 (half-committed / at-least-once): alg-batch-per-dialog-cycle правило 5 — строгий порядок коммита
+  отправка → запись связки → продвижение курсора; реакции на сбой (курсор не двигать; ≤1 дубль при краше;
+  потеря запрещена).
+- MAJOR-005 (single-instance): cmp-bridge-orchestrator — эксклюзивный flock на lock-файле гарантирует
+  непересечение тактов; краш освобождает блокировку (ссылки NFR-OPS-05 / NFR-DEPLOY-05, req не тронут).
+- MAJOR-001 (fetch-непрерывность): api-telegram-userclient — контракт «id > cursor, непрерывность не
+  требуется»; high-watermark делает пропуски безвредными (без gap-detection).
+- MAJOR-002 (частичная недействительность сессии): api-telegram-userclient (нота у таблицы ошибок) +
+  data-bridge-store (расширен триггер) — ЛЮБОЙ отказ сессии/авторизации (в т.ч. post при рабочем fetch) →
+  session-invalid; модель valid/invalid остаётся бинарной.
+- MAJOR-004 (rate-limit SMTP): api-mailbox-imap-smtp — отдельный класс ошибки в таблице (retryable→backoff,
+  как transient); подтверждения/уведомления переотправляются.
+- MINOR-006 (сброс notified): scn-first-run-setup (шаг 4 + постусловие) + scn-session-invalid-alert
+  (ветвление) — реинициализация выставляет notified=false (будущий отзыв снова уведомит U).
+- MINOR-007 (retention): data-bridge-store — oldest-first purge только РАЗРЕШЁННЫХ записей по возрасту/количеству;
+  значения — конфиг (bounded — NFR-OPS-07).
+
+### По элементам (fold-пасс)
+| Элемент (slug) | Узел | Находки GLM | Правка | Итераций |
+|---|---|---|---|---|
+| alg-batch-per-dialog-cycle | правка | MAJOR-003, MAJOR-006 | high-watermark + строгий порядок коммита + правило 7/инвариант | 1 |
+| alg-dedup-idempotency | правка | MAJOR-003 | правило 1 — high-watermark, пропуски не блокируют | 1 |
+| data-bridge-store | правка | MAJOR-003, MAJOR-002, MINOR-007 | last_id high-watermark, триггер сессии, oldest-first retention | 1 |
+| cmp-bridge-orchestrator | правка | MAJOR-005 | эксклюзивный flock, гарантия единственного экземпляра | 1 |
+| api-telegram-userclient | правка | MAJOR-001, MAJOR-002 | контракт непрерывности выборки, session-invalid для любой операции | 1 |
+| api-mailbox-imap-smtp | правка | MAJOR-004 | класс rate-limit в таблице ошибок (retryable→backoff) | 1 |
+| scn-session-invalid-alert | правка | MINOR-006 | сброс notified=false при реинициализации | 1 |
+| scn-first-run-setup | правка | MINOR-006 | шаг 4 + постусловие: notified=false | 1 |
+
+### scope-fence (соседи без правки → вердикт)
+- cmp-tg-gateway — НЕ тронут (MINOR-001/005 = read-artifact GLM): файл существует (85 строк), все 6
+  capabilities детализированы с входами/выходами; пробела спеки нет.
+- scn-inbound-collect-cycle — НЕ тронут: порядок коммита (шаги 11–12) и ветка half-committed уже описаны;
+  каноническая механика (high-watermark, порядок фиксации) свёрнута в alg-* (анти-дубль D-DUP), сценарий
+  ссылается на них.
+- alg-backoff-on-floodwait — НЕ тронут: rate-limit трактуется как transient, уже в его ведении;
+  дополнен только КЛАСС в таблице api-mailbox (владелец реакции — backoff — не меняется).
+- cmp-state-store — НЕ тронут: capability-контур (cap-manage-cursor/ledger/session-health/consume-markers)
+  неизменен; high-watermark/retention — уточнение семантики значений в data-bridge-store, не новая capability.
+- cmp-email-out, cmp-email-in, scn-outbound-reply, scn-control-command, alg-addressing-gate,
+  alg-oversize-degrade, cd-mailtg-bridge, tc-int-* (4) — НЕ тронуты: вне зоны свёрнутых находок
+  (correctness курсора/сессии/лимитов их контрактов не меняет).
+- 01-requirements/* (nfr-operability, nfr-deployability и весь req-слой) — НЕ тронут: spec_ready заморожен;
+  WHAT для MAJOR-005/MINOR-007 уже есть (NFR-OPS-05/07), свёрнут HOW на спеке со ссылкой (см. verify-response-spec «Решение по границе слоёв»).
+- 00-masterspec-index — НЕ тронут: набор артефактов / capabilities / счётчик терминов (23) не изменились.
+
+### DEFERRED (зафиксировано, не свёрнуто — over-engineering не заводим)
+- MINOR-002 — 2FA timeout/bad: интерактивный разовый setup, человек повторяет ввод (bad-code/bad-password уже терминален).
+- MINOR-003 — частичная загрузка медиа: трактуется как media-unavailable (уже в контракте/сценарии).
+- MINOR-004 — критерии version-compat: pin+smoke Telethon — забота CI/реализации, не спеки.
+
+### Метрики (отчуждаемо)
+- тронуто/в каскаде: 8/8; каждая правка трассируется на находку GLM (MAJOR/MINOR).
+- свёрнуто/понижено/отдано-реализации: 8 / 2 / 3 (из 13 находок; итоги — verify-response-spec.md).
+- новых артефактов: 0; немых вердиктов: 0; немых подъёмов: 0; открытых развилок (ADR): 0.
+- критерий: codegen_ready = yes (по суждению оркестратора; 6/6 MAJOR закрыты) — pending human-gate.
+
+### Открытые вопросы человеку
+- Единственность-экземпляра: flock свёрнут на спеке (cmp-bridge-orchestrator) со ссылкой на NFR-OPS-05.
+  Материализовать ли это отдельным req-пунктом (напр., NFR-DEPLOY-06 «эксклюзивная блокировка / единственный
+  экземпляр») — требует разморозки spec_ready req-слоя; на усмотрение владельца (не блокер codegen).
+- Значения retention/lock-файл/backoff-минимум — конфигурация поставки (как и прочие дефолты, см. выше).
