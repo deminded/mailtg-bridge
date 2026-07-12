@@ -141,3 +141,73 @@ chat-id (Диалог) и msg-id (Сообщение) уже в cdm — ссыл
 
 ## Пост-evolve уточнение (12.07): deep-link для лички 1:1
 Евгений: на приватную 1:1 личку Telegram не даёт шаримой ссылки на сообщение. Правило rules-delivery, fn-dm AC-05, tc-acc-dm, глоссарий — приведены к трёхчастной точности (публичный username / приватная группа участнику t.me/c/ / личка 1:1 без ссылки, best-effort tg://).
+
+## Fold GLM blind-verify (12.07): свёртка adversarially-triaged дефектов
+Независимый blind-verify GLM-4 (`verify-report-req-glm.md`) сверен оркестратором с артефактами; свёрнуты
+ТОЛЬКО подтверждённые req-level пункты, misread-и понижены, HOW отдан спеке. Полный per-finding вердикт —
+`verify-response-req.md`. Режим — ПРАВКА in-place (слой ещё draft). Новых артефактов 0; набор и число
+терминов глоссария (23) не изменились → индекс §2–6 не тронут.
+
+### Импакт по свёрнутым пунктам
+- CRIT-001 (устойчивость): nfr-operability NFR-OPS-06 + rules-integrity (толерантность к FloodWait/
+  transient IMAP/SMTP, back off, at-least-once; алгоритм — спека).
+- CRIT-002 (сессия недействительна): cdm-bridge (+сущность «Состояние сессии», отдельная state-матрица
+  с блокирующим состоянием, инвариант, атрибут); fn-first-run-setup (исключит. поток + AC-03: стоп-опрос
+  + письмо U, без зацикливания); glossary (размежевание с переключателем доставки).
+- CRIT-003 остаток: (a) идемпотентность приёма ответа — rules-integrity + cdm (инвариант+матрица) +
+  fn-email-reply-to-tg AC-05 + tc-acc-antiloop-dedup; (b) токен — fn-bridge-control-by-email AC-04 +
+  tc-acc-bridge-control. Центрирование предиката — НЕ трогали (misread; предикат уже един в rules-control).
+- CRIT-004/MAJOR-005 (размер письма): rules-delivery (деградация + конфигурируемый лимит) + fn-media-in-email
+  AC-05 + cdm (атрибут «лимит размера письма»). Дефолт-значение — конфиг (не выдумано).
+- MAJOR-001 (личка 1:1): rules-delivery + glossary — best-effort-or-absent, без неопределённого формата.
+- MAJOR-002 (топик-ссылка): rules-delivery + glossary — `t.me/c/<chat>/<topic>/<msg>` / `t.me/<user>/<topic>/<msg>`.
+- MAJOR-004 (сбой записи курсора/связки): cdm (инвариант+матрица) + rules-integrity — курсор не двигать,
+  at-least-once; tc-acc-antiloop-dedup обобщён.
+- MAJOR-006 (рост журнала): cdm (инвариант retention + атрибут) + nfr-operability NFR-OPS-07 (bounded).
+- MINOR-003 (глоссарий deep-link): расширен. MINOR-004 (adr-001): ссылка на channel-reader + de-agent-commons.
+
+### По элементам (fold-пасс)
+| Элемент (slug) | Узел | Находки GLM | Правка | Итераций |
+|---|---|---|---|---|
+| cdm-bridge | правка | CRIT-002/003a/004, MAJOR-004/006 | сущность+матрица сессии, инварианты, атрибуты конфига, строки матрицы сообщения | 1 |
+| rules-integrity | правка | CRIT-001/003a, MAJOR-004 | правила устойчивости, идемпотентность приёма, at-least-once на сбой записи | 1 |
+| nfr-operability | правка | CRIT-001, MAJOR-006 | NFR-OPS-06 (resilience), NFR-OPS-07 (retention) | 1 |
+| rules-delivery | правка | CRIT-004/MAJOR-005, MAJOR-001/002 | деградация по лимиту письма, топик-ссылка, формулировка лички 1:1 | 1 |
+| fn-media-in-email | правка | CRIT-004/MAJOR-005 | исключит. поток деградации + AC-05 + пред/постусловия | 1 |
+| fn-first-run-setup | правка | CRIT-002 | стоп-опрос+письмо U, без зацикливания; AC-03 усилен | 1 |
+| fn-bridge-control-by-email | правка | CRIT-003b/MAJOR-008 | исключит. поток токена + AC-04 | 1 |
+| fn-email-reply-to-tg | правка | CRIT-003a | альт-поток идемпотентности + AC-05 | 1 |
+| tc-acc-bridge-control | правка | CRIT-003b/MAJOR-008 | вход/шаг/ожидание токена, AC-04 | 1 |
+| tc-acc-antiloop-dedup | правка | CRIT-003a, MAJOR-004 | идемпотентность приёма + сбой записи курсора/связки | 1 |
+| adr-001-python-core-reuse | правка | MINOR-004 | ссылка на channel-reader / de-agent-commons | 1 |
+| 00-glossary | правка | MAJOR-001/002, MINOR-003, CRIT-002 | deep-link расширен, размежевание состояния сессии | 1 |
+
+### scope-fence (соседи без правки → вердикт)
+- fn-dm-batch-to-email, fn-channel-update-to-email — НЕ тронуты для CRIT-001: обобщённый исключит. поток
+  «Опрос Telegram недоступен → такт пропускается без потери» уже покрывает FloodWait; каноническое
+  WHAT свёрнуто в rules-integrity+nfr (анти-дубль D-DUP). Топик-ссылка fn-channel ссылается на
+  канонический формат rules-delivery (не дублируем точную грамматику в fn).
+- rules-control — НЕ тронут: предикат доверия уже централизован и корректен (misread GLM понижен).
+- rules-security, nfr-security, nfr-privacy, nfr-portability, nfr-deployability — НЕ тронуты: свёрнутые
+  пункты не вводят новых требований к кредам/логам/провайдер-нейтральности/деплою.
+- rules-gating, dict-source-type, dict-media-disposition, adr-002, as-mailtg-bridge, context-mailtg-bridge,
+  tc-acc-dm-delivery, tc-acc-channel-gating, tc-acc-email-reply, tc-acc-media-rendering, tc-acc-deploy-and-security,
+  tc-acc-channel-gating — НЕ тронуты: вне зоны свёрнутых находок (MINOR-005 — misread: AC-04(dm) покрыт
+  в tc-acc-antiloop-dedup).
+- 00-masterspec-index — НЕ тронут: артефактов не добавлено, счётчик терминов (23) не изменился.
+
+### DEFERRED-TO-SPEC (зафиксировано, не свёрнуто в req)
+- MAJOR-003 — метод/алгоритм детекции анти-петли (WHAT в req; HOW — спека).
+- MAJOR-007 — модель конкурентного доступа (однопроцессный поллер = проектное решение → спека).
+- CRIT-004 — конкретное дефолт-значение порога/лимита (конфиг; число не выдумывается на req).
+- MINOR-001 — косметика комментария cdm (тривиально, не блокирует spec_ready).
+
+### Метрики (отчуждаемо)
+- тронуто/в каскаде: 12/12; каждая правка трассируется на находку GLM (CRIT/MAJOR/MINOR).
+- свёрнуто/понижено/отдано-спеке: 12 / 3 / 4 (из 17 находок; итоги — verify-response-req.md).
+- новых артефактов: 0; немых вердиктов: 0; немых подъёмов: 0; открытых развилок (ADR): 0.
+- критерий: spec_ready = yes (по суждению оркестратора; блокеры CRIT-001..004 закрыты по WHAT) — pending human-gate.
+
+### Открытые вопросы человеку
+- Практически нет. На реализации подтвердить доступность числового `topic_id` в формате
+  `t.me/c/<chat>/<topic>/<msg>` (как и ранее для `t.me/c/<chat>/<msg>`); при неприменимости — резерв на спеке.
