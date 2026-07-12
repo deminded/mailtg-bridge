@@ -1,4 +1,5 @@
 .env
+*.log
 masterspec/.work/
 output/
 *.pyc
