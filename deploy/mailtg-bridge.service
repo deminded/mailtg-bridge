@@ -1,0 +1,24 @@
+[Unit]
+Description=Telegram user-client to email bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mailtg-bridge
+Group=mailtg-bridge
+EnvironmentFile=/etc/mailtg-bridge/mailtg-bridge.env
+ExecStart=/opt/mailtg-bridge/venv/bin/python -m mailtg_bridge run
+StateDirectory=mailtg-bridge
+RuntimeDirectory=mailtg-bridge
+UMask=0077
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mailtg-bridge /run/mailtg-bridge
+
+[Install]
+WantedBy=multi-user.target
