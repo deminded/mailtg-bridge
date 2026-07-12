@@ -1,0 +1,8 @@
+# Фабрика mail-tg-bridge — подключение guardrails (ссылки, правила — в пакетах)
+guardrail_packs:
+  # переиспользуем обкатанный пакет; на применении режется селекторами applies_to.
+  # (при желании — свой пакет через /masterspec-pack из security/privacy-требований)
+  - path: /home/claude-user/rbre-guardrails
+severity_policy:
+  block_on: [critical, major]
+  minor_max_iterations: 2
