@@ -4,7 +4,7 @@ from email.policy import default
 from mailtg_bridge.config import Settings
 from mailtg_bridge.domain import *
 from mailtg_bridge.mail_out import EmailComposer
-from test_config import env
+from tests.helpers import settings_env as env
 
 def test_mime_plain_html_and_exact_limit(tmp_path):
     e=env(tmp_path); e['EMAIL_SIZE_LIMIT_BYTES']='5000'; e['ATTACHMENT_THRESHOLD_BYTES']='1000'
@@ -22,3 +22,12 @@ def test_oversize_splits_between_messages(tmp_path):
     ms=tuple(TgMessage(i,'d',datetime.now(timezone.utc),text='x'*500) for i in range(1,4))
     drafts=c.compose_batch(DialogBatch(d,ms,3),{})
     assert len(drafts)>1 and all(len(x.raw)<=1800 for x in drafts)
+
+def test_inline_image_has_referenced_cid(tmp_path):
+    e=env(tmp_path); e['EMAIL_SIZE_LIMIT_BYTES']='10000'; e['ATTACHMENT_THRESHOLD_BYTES']='1000'
+    s=Settings.from_env(environ=e); c=EmailComposer(s); d=DialogRef('d',SourceType.DM,title='D')
+    m=TgMessage(1,'d',datetime.now(timezone.utc),media=(MediaRef('1','x.png','image/png',8),)); p=tmp_path/'x.png'; p.write_bytes(b'\x89PNGdata')
+    raw=c.compose_batch(DialogBatch(d,(m,),1),{1:[DownloadedMedia(m.media[0],p,8)]})[0].raw
+    parsed=message_from_bytes(raw,policy=default); markup=parsed.get_body(('html',)).get_content()
+    cids=[x['Content-ID'].strip('<>') for x in parsed.walk() if x.get('Content-ID')]
+    assert cids and f'cid:{cids[0]}' in markup

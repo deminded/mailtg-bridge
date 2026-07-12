@@ -1,5 +1,5 @@
 from __future__ import annotations
-import html, mimetypes, smtplib, ssl, uuid
+import hashlib, html, smtplib, ssl, uuid
 from email.message import EmailMessage
 from email.policy import SMTP
 from email.utils import formatdate
@@ -23,7 +23,11 @@ class EmailComposer:
             if link: block+=f'<a href="{html.escape(link)}">Open in Telegram</a>'
             for dm in media.get(m.msg_id,()):
                 key=str(dm.path)
-                if key in omitted: block+=f"<p>[omitted media: {html.escape(dm.ref.content_type)}, {dm.size} bytes]</p>"; continue
+                if key in omitted or (not dm.ref.content_type.startswith("image/") and dm.size>self.s.attachment_threshold_bytes):
+                    marker=f"[omitted media: {dm.ref.content_type}, {dm.size} bytes]"; block+=f"<p>{html.escape(marker)}</p>"; plain[-1]+="\n"+marker; continue
+                if dm.ref.content_type.startswith("image/"):
+                    cid=hashlib.sha256(key.encode()).hexdigest()[:24]
+                    block+=f'<img src="cid:{cid}" alt="inline image">'
                 attachments.append(dm)
             blocks.append(block+"</article>")
         return "\n\n".join(plain),"<html><body>"+"".join(blocks)+"</body></html>",attachments
@@ -36,7 +40,9 @@ class EmailComposer:
         for dm in attachments:
             maintype,subtype=(dm.ref.content_type if "/" in dm.ref.content_type else "application/octet-stream").split("/",1)
             data=dm.path.read_bytes()
-            if maintype=="image": html_part.add_related(data,maintype=maintype,subtype=subtype,cid=f"<{uuid.uuid4().hex}>",filename=dm.ref.filename)
+            if maintype=="image":
+                cid=hashlib.sha256(str(dm.path).encode()).hexdigest()[:24]
+                html_part.add_related(data,maintype=maintype,subtype=subtype,cid=f"<{cid}>",filename=dm.ref.filename)
             elif dm.size<=self.s.attachment_threshold_bytes: msg.add_attachment(data,maintype=maintype,subtype=subtype,filename=dm.ref.filename)
         return msg,mid
     def compose_batch(self,batch: DialogBatch,media):

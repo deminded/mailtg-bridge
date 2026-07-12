@@ -7,7 +7,7 @@ from mailtg_bridge.domain import *
 from mailtg_bridge.mail_in import parse_inbound
 from mailtg_bridge.orchestrator import BridgeService
 from mailtg_bridge.state import SQLiteStore
-from test_config import env
+from tests.helpers import settings_env as env
 
 class Tg:
     def __init__(self,d,m): self.d=d; self.m=m; self.posts=[]; self.calls=0
