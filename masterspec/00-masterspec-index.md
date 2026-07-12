@@ -9,7 +9,7 @@ updated: 2026-07-12
 - Фабрика: mailtg-bridge — мост между личным аккаунтом Telegram (пользовательский доступ) и почтой
 - Владелец: Евгений
 - Дата создания индекса: 2026-07-12
-- Статус описания: draft (слой требований сгенерирован, ждёт human-gate → actual)
+- Статус описания: draft (слои требований и спецификаций сгенерированы, ждут human-gate → actual)
 
 ---
 
@@ -53,7 +53,6 @@ updated: 2026-07-12
 
 ### 3.5. Диаграмма окружения и функциональная диаграмма
  - `01-requirements/05-landscape/context-mailtg-bridge.md` # Диаграмма окружения
- <!-- fd-<slug> не создавалась: связи функций линейны (вход→ledger→ответ), отдельная диаграмма избыточна на MVP -->
 
 ### 3.6. Концептуальная модель данных
  - `01-requirements/06-data-model/cdm-bridge.md` # Домен моста (сущности + состояния/переходы)
@@ -74,7 +73,75 @@ updated: 2026-07-12
 ---
 
 ## 4. Слой спецификаций
-_Не генерировался (derive layer=req). Ждёт согласования требований и запуска layer=spec._
+
+### 4.1. Компоненты и их возможности
+ - `02-specifications/01-components/cmp-bridge-orchestrator.md` # Оркестратор моста (поллинг-цикл)
+   · cap-apply-backoff — отступ при FloodWait/преходящих ошибках без busy-loop
+   · cap-assemble-dialog-batch — группировка сообщений диалога за такт в один батч
+   · cap-enforce-delivery-gates — проверка «мост включён И сессия действительна»
+   · cap-run-inbound-cycle — такт сбора входящих (Telegram → письмо)
+   · cap-run-mailbox-cycle — такт опроса ящика (ответы/команды)
+
+ - `02-specifications/01-components/cmp-email-in.md` # Входящая почта (опрос ящика B, ответы и команды)
+   · cap-authenticate-sender — единый предикат доверия (U ∧ на B ∧ in-reply-to)
+   · cap-classify-message — ответ / команда / игнор
+   · cap-mark-consumed — однократное потребление письма
+   · cap-poll-b-imap — выборка новых писем на ящике B
+   · cap-resolve-ledger — In-Reply-To → запись связки → диалог
+
+ - `02-specifications/01-components/cmp-email-out.md` # Исходящая почта (формирование и отправка с ящика B)
+   · cap-build-deeplink — глубокая ссылка по типу источника (личка — без ссылки)
+   · cap-compose-batch-email — HTML+текст письмо из батча
+   · cap-degrade-on-oversize — деградация/дробление при превышении лимита
+   · cap-render-media — инлайн-изображение / файл / текстовое указание
+   · cap-send-from-b — SMTP-отправка с B на U с заголовками треда
+   · cap-send-notice — подтверждения команд и уведомление о сессии
+
+ - `02-specifications/01-components/cmp-state-store.md` # Хранилище состояния (курсоры, журнал связки, состояния, конфигурация)
+   · cap-manage-bridge-state — переключатель вкл/выкл (singleton, персистентный)
+   · cap-manage-consume-markers — маркеры потреблённых писем (ограниченные)
+   · cap-manage-cursor — курсор диалога (монотонный, продвижение после отправки)
+   · cap-manage-ledger — журнал связки (добавление/поиск/retention)
+   · cap-manage-session-health — здоровье сессии (действительна/недействительна, блокирующее)
+   · cap-read-config — доступ к валидированной конфигурации
+
+ - `02-specifications/01-components/cmp-tg-gateway.md` # Шлюз Telegram (пользовательская сессия)
+   · cap-apply-addressing-gate — гейт: личка всегда, канал/группа по списку∨упоминанию
+   · cap-detect-own-echo — отсев собственного эха (анти-петля)
+   · cap-download-media — скачивание вложений сообщения
+   · cap-fetch-since-cursor — выборка новых сообщений диалога после курсора
+   · cap-post-as-user — публикация ответа в диалог от лица пользователя
+   · cap-surface-session-errors — классификация ошибок MTProto (FloodWait/преходящая/сессия)
+
+### 4.2. Сценарии
+ - `02-specifications/02-scenarios/scn-control-command.md` # Управление мостом письмом (включить/выключить)
+ - `02-specifications/02-scenarios/scn-first-run-setup.md` # Первичная авторизация Telegram (интерактивный setup → сессия)
+ - `02-specifications/02-scenarios/scn-inbound-collect-cycle.md` # Такт сбора входящих (Telegram → письмо-батч)
+ - `02-specifications/02-scenarios/scn-outbound-reply.md` # Публикация ответа из почты в Telegram
+ - `02-specifications/02-scenarios/scn-session-invalid-alert.md` # Недействительная сессия — остановка и уведомление
+
+### 4.3. Алгоритмы
+ - `02-specifications/03-algorithms/alg-addressing-gate.md` # Гейт адресованности (что доставляется)
+ - `02-specifications/03-algorithms/alg-backoff-on-floodwait.md` # Отступ при FloodWait и преходящих ошибках
+ - `02-specifications/03-algorithms/alg-batch-per-dialog-cycle.md` # Батчинг «диалог за такт» и дисциплина курсора
+ - `02-specifications/03-algorithms/alg-dedup-idempotency.md` # Дедуп доставки, анти-петля, идемпотентность приёма
+ - `02-specifications/03-algorithms/alg-oversize-degrade.md` # Деградация при превышении лимита размера письма
+
+### 4.5. Внешние API
+ - `02-specifications/04-apis/external/api-mailbox-imap-smtp.md` # Ящик моста B — SMTP/IMAP (usage-контракт)
+ - `02-specifications/04-apis/external/api-telegram-userclient.md` # Пользовательский клиент Telegram (usage-контракт MTProto)
+
+### 4.6. Схемы данных
+ - `02-specifications/05-data/data-bridge-store.md` # Персистентное состояние моста
+
+### 4.7. Диаграммы
+ - `02-specifications/06-diagrams/cd-mailtg-bridge.md` # Компонентная диаграмма моста
+
+### 4.9. Интеграционные тесты
+ - `02-specifications/08-test-cases/tc-int-inbound-collect-cycle.md` # Такт сбора (гейт+батч+медиа+деградация+дедуп)
+ - `02-specifications/08-test-cases/tc-int-outbound-reply.md` # Ответ из почты в TG (доверие+маршрутизация+идемпотентность)
+ - `02-specifications/08-test-cases/tc-int-control-command.md` # Управление вкл/выкл (доверие+токен+идемпотентность)
+ - `02-specifications/08-test-cases/tc-int-session-invalid-alert.md` # Недействительная сессия (стоп+уведомление, без зацикливания)
 
 ---
 
@@ -94,6 +161,8 @@ _Не генерировался._
 - Q5 (reply на конкретное TG-сообщение) — СНЯТ решением по гранулярности: ответ уходит в диалог целиком; reply-to сообщения — задел версии 2.
 - Мера доступности приёма (SLA) намеренно не задана (best-effort поллинг) — помечена missing-business в -> nfr-operability, назначается владельцем при необходимости.
 - Веб-диск для крупных вложений — задел версии 2 (значение `weblink` в -> dict-media-disposition пока не активно).
+- Дефолтные значения конфигурации (порог вложений, лимит письма, retention, интервалы сбора/отправки, минимальный отступ backoff) — задать в примере конфигурации при поставке (DEFERRED-TO-SPEC/config, см. route-run-spec.md).
+- Формат физического хранения состояния (единый файл vs встроенное key-value) — на слой кода (dmap); на спеке зафиксированы логические инварианты и «без шифрования» (принятый остаточный риск).
 
 ---
 
