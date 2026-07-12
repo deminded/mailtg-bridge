@@ -1,7 +1,8 @@
 .env
+masterspec/.work/
+output/
+*.pyc
+__pycache__/
+secrets/
 *.session
 *.session-journal
-secrets/
-output/
-__pycache__/
-*.pyc
