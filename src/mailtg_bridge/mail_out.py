@@ -33,7 +33,8 @@ class EmailComposer:
         return "\n\n".join(plain),"<html><body>"+"".join(blocks)+"</body></html>",attachments
     def _message(self,batch,media,part,nparts,omitted=frozenset()):
         msg=EmailMessage(); mid=make_message_id(self.domain); msg["From"]=self.s.b_address; msg["To"]=self.s.u_address
-        base=f"Telegram: {batch.dialog.source_tag or batch.dialog.title or batch.dialog.dialog_id}"
+        _name=batch.dialog.title or (f"@{batch.dialog.username}" if batch.dialog.username else batch.dialog.source_tag or batch.dialog.dialog_id)
+        base=f"Telegram: {_name}"
         msg["Subject"]=base+(f" ({part}/{nparts})" if nparts>1 else ""); msg["Message-ID"]=mid; msg["Date"]=formatdate(localtime=False)
         plain,markup,attachments=self._render(batch,media,omitted); msg.set_content(plain or "Telegram update"); msg.add_alternative(markup,subtype="html")
         html_part=msg.get_payload()[-1]
