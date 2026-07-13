@@ -44,6 +44,23 @@ def test_reply_action_then_consume_and_command(tmp_path):
         asyncio.run(svc.run_mailbox_cycle()); assert tg.posts==[(d.dialog_id,'answer')] and st.is_consumed('r1')
         assert not st.bridge_state().enabled and st.is_consumed('c1') and len(out.notices)==1
 
+def test_command_reply_to_notice_and_reject_unknown(tmp_path):
+    # Live test: user replied "MAILTG ON" to the OFF *confirmation*, whose id is not in the
+    # delivery ledger. A command must be trusted when it replies to any bridge-sent mail
+    # (delivery OR notice), but rejected when it replies to something the bridge never sent.
+    s=settings(tmp_path)
+    def cmd(ref,irt,body):
+        m=EmailMessage(); m['From']=s.u_address; m['To']=s.b_address; m['In-Reply-To']=irt
+        m['Subject']='Re: mailtg-bridge is OFF'; m.set_content(body); return parse_inbound(m.as_bytes(),ref)
+    with SQLiteStore(s.state_db_path) as st:
+        st.set_session(True); st.set_bridge_enabled(False)
+        st.record_notice_sent('<notice-off@x>')            # the confirmation the bridge sent
+        out=Out(); svc=BridgeService(s,st,Tg(DialogRef('-1001',SourceType.CHANNEL),[]),
+            In([cmd('u-unknown','<stranger@x>','MAILTG ON'), cmd('u-notice','<notice-off@x>','MAILTG ON')]),out)
+        asyncio.run(svc.run_mailbox_cycle())
+        assert st.bridge_state().enabled is True, "reply to a bridge notice must re-enable"
+        assert st.is_consumed('u-notice') and not st.is_consumed('u-unknown'), "unknown-parent command ignored"
+
 def test_tail_bootstrap_is_silent(tmp_path):
     s=settings(tmp_path,False); d=DialogRef('-1001',SourceType.CHANNEL,whitelisted=True); out=Out()
     with SQLiteStore(s.state_db_path) as st:

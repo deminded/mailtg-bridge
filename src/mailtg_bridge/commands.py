@@ -8,11 +8,16 @@ class Command:
 
 _RE=re.compile(r"^MAILTG\s+(ON|OFF)(?:\s+([^\s]+))?$",re.I)
 
+def _unwrap(text: str) -> str:
+    # Users copy the command from formatted instructions, dragging in wrappers
+    # (backticks, quotes, *bold*). Strip that decoration so "`MAILTG ON`" still parses.
+    return text.strip().strip("`\"'*_ ").strip()
+
 def parse_command(subject: str, body: str, required_token: str="") -> Command | None:
     candidates=[]
-    if subject.strip(): candidates.append(subject.strip())
+    if subject.strip(): candidates.append(_unwrap(subject))
     lines=[x.strip() for x in body.splitlines() if x.strip()]
-    if lines: candidates.append(lines[0])
+    if lines: candidates.append(_unwrap(lines[0]))
     for text in candidates:
         m=_RE.fullmatch(text)
         if not m: continue

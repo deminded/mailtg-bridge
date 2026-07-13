@@ -25,9 +25,9 @@ class BridgeService:
         health=self.store.session_health()
         if health.valid: self.store.set_session(False,False)
         if not self.store.session_health().notified:
-            try: self.mail_out.send_notice("mailtg-bridge: Telegram session invalid","Telegram authorization must be restored with mailtg-bridge setup.")
+            try: mid=self.mail_out.send_notice("mailtg-bridge: Telegram session invalid","Telegram authorization must be restored with mailtg-bridge setup.")
             except Transient as exc: self.record_failure("mail:session-notice",exc); return
-            self.store.mark_session_notified(); self.store.clear_backoff("mail:session-notice")
+            self.store.record_notice_sent(mid); self.store.mark_session_notified(); self.store.clear_backoff("mail:session-notice")
     async def run_inbound_cycle(self):
         if not self.delivery_allowed() or not self._due("tg:list"): return
         try: dialogs=await self.tg.list_tracked_dialogs(); self.store.clear_backoff("tg:list")
@@ -71,14 +71,19 @@ class BridgeService:
         except Transient as exc: self.record_failure("mail:poll",exc); return
         for mail in mails:
             if self.store.is_consumed(mail.mail_ref) or not self.classifier.trusted(mail): continue
-            parent=self.store.ledger_dialog(self.classifier.parent_ids(mail))
-            if not parent: continue
+            parents=self.classifier.parent_ids(mail)
             command=parse_command(mail.subject,mail.body_text,self.s.command_token)
             if command:
+                # A command has no dialog; trust needs only that it replies to something the
+                # bridge sent (delivery OR confirmation) — replying to the last confirmation
+                # is the natural way to toggle back on.
+                if not self.store.is_bridge_message(parents): continue
                 self.store.set_bridge_enabled(command.enabled,mail.mail_ref)
                 state="ON" if command.enabled else "OFF"; kind=f"command:{mail.mail_ref}"
                 self.store.queue_notice(kind,f"mailtg-bridge is {state}",f"Bridge state is now {state}.")
                 continue
+            parent=self.store.ledger_dialog(parents)
+            if not parent: continue
             if not self.delivery_allowed() or not mail.body_text: continue
             try:
                 posted=await self.tg.post_as_user(parent,mail.body_text)
@@ -89,7 +94,9 @@ class BridgeService:
         if not self.store.session_health().valid: await self.invalidate_session()
     async def flush_notices(self):
         for notice in self.store.pending_notices():
-            try: self.mail_out.send_notice(notice["subject"],notice["body"]); self.store.delete_notice(notice["kind"])
+            try:
+                mid=self.mail_out.send_notice(notice["subject"],notice["body"])
+                self.store.record_notice_sent(mid); self.store.delete_notice(notice["kind"])
             except Transient as exc: self.record_failure(f"mail:notice:{notice['kind']}",exc)
     async def run_once(self,kind="all"):
         if kind in {"all","inbound"}: await self.run_inbound_cycle()

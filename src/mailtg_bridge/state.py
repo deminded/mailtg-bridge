@@ -59,6 +59,7 @@ class SQLiteStore:
               failures INTEGER NOT NULL CHECK(failures>=0), updated_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS pending_notice(kind TEXT PRIMARY KEY, subject TEXT NOT NULL, body TEXT NOT NULL,
               created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS sent_notice(message_id TEXT PRIMARY KEY, created_at TEXT NOT NULL);
             """)
             now=self._iso()
             self.db.execute("INSERT OR IGNORE INTO meta VALUES('schema_version',?)",(str(SCHEMA_VERSION),))
@@ -100,6 +101,18 @@ class SQLiteStore:
             row=self.db.execute("SELECT dialog_id FROM mail_ledger WHERE message_id=?",(mid,)).fetchone()
             if row: return str(row[0])
         return None
+    def record_notice_sent(self, message_id: str):
+        if not message_id: return
+        with self.transaction():
+            self.db.execute("INSERT OR IGNORE INTO sent_notice VALUES(?,?)",(message_id,self._iso()))
+    def is_bridge_message(self, message_ids: Sequence[str]) -> bool:
+        # Anti-spoof gate for commands: was this a reply to something the bridge itself
+        # sent — a delivery (ledger) OR a notice/confirmation? Both carry a private
+        # Message-ID a spoofer can't forge; the confirmation is the natural thing to reply to.
+        for mid in message_ids:
+            if self.db.execute("SELECT 1 FROM mail_ledger WHERE message_id=?",(mid,)).fetchone(): return True
+            if self.db.execute("SELECT 1 FROM sent_notice WHERE message_id=?",(mid,)).fetchone(): return True
+        return False
     def is_consumed(self, ref: str) -> bool:
         return self.db.execute("SELECT 1 FROM consumed_mail WHERE mail_ref=?",(ref,)).fetchone() is not None
     def mark_consumed(self, ref: str):
@@ -147,5 +160,6 @@ class SQLiteStore:
         with self.transaction():
             self.db.execute("DELETE FROM mail_ledger WHERE delivered_at<?",(cut,)); self.db.execute("DELETE FROM consumed_mail WHERE consumed_at<?",(cut,))
             self.db.execute("DELETE FROM posted_echo WHERE posted_at<?",(echo_cut,))
+            self.db.execute("DELETE FROM sent_notice WHERE created_at<?",(cut,))
             for table,col,limit in (("mail_ledger","delivered_at",max_ledger),("consumed_mail","consumed_at",max_consumed),("posted_echo","posted_at",max_echo)):
                 self.db.execute(f"DELETE FROM {table} WHERE rowid IN (SELECT rowid FROM {table} ORDER BY {col} DESC LIMIT -1 OFFSET ?)",(limit,))
