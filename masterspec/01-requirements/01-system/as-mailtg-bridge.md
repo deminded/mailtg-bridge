@@ -3,8 +3,9 @@ type: passport-as
 slug: as-mailtg-bridge
 factory: mailtg-bridge
 status: draft
+meta_model_version: 3.0-spec
 owner: Евгений
-updated: 2026-07-12
+updated: 2026-07-13
 ---
 # АС/ФП: Мост Telegram ↔ Почта (mailtg-bridge)
 
