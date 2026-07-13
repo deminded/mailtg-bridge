@@ -37,6 +37,8 @@ class BridgeService:
             scope=f"tg:{dialog.dialog_id}"
             if not self._due(scope): continue
             cursor=self.store.get_cursor(dialog)
+            if dialog.top_id is not None and dialog.top_id<=cursor.last_id:
+                self.store.clear_backoff(scope); continue
             try:
                 messages=list(await self.tg.fetch_since(dialog,cursor.last_id,self.s.tg_fetch_limit))
                 if not messages: self.store.clear_backoff(scope); continue

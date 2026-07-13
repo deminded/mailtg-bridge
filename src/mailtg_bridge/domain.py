@@ -32,6 +32,7 @@ class DialogRef:
     topic_id: int | None = None
     source_tag: str = ""
     whitelisted: bool = False
+    top_id: int | None = None
 
 @dataclass(frozen=True, slots=True)
 class Cursor:

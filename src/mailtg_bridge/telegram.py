@@ -40,20 +40,21 @@ class TelethonGateway:
         try:
             if self.s.mention_policy.value=="all" and self.s.discover_all_dialogs:
                 async for d in self.client.iter_dialogs():
-                    if getattr(d,"is_user",False): result.append(self._dialog(d.entity,None,True))
-                    elif getattr(d,"is_channel",False) or getattr(d,"is_group",False): result.append(self._dialog(d.entity,None,False))
+                    tid=d.message.id if getattr(d,"message",None) else None
+                    if getattr(d,"is_user",False): result.append(self._dialog(d.entity,None,True,tid))
+                    elif getattr(d,"is_channel",False) or getattr(d,"is_group",False): result.append(self._dialog(d.entity,None,False,tid))
             else:
                 async for d in self.client.iter_dialogs():
-                    if getattr(d,"is_user",False): result.append(self._dialog(d.entity,None,True))
+                    if getattr(d,"is_user",False): result.append(self._dialog(d.entity,None,True,d.message.id if getattr(d,"message",None) else None))
                 for source in sorted(sources):
                     peer,topic=parse_source(source); entity=await self._entity(peer); result.append(self._dialog(entity,topic,source in self.s.whitelist))
             unique={d.dialog_id:d for d in result}; return list(unique.values())
         except Exception as exc: raise classify_error(exc) from exc
-    def _dialog(self,e,topic,whitelisted):
+    def _dialog(self,e,topic,whitelisted,top_id=None):
         eid=getattr(e,"id",0); is_user=type(e).__name__=="User" or getattr(e,"bot",None) is not None
         is_channel=getattr(e,"broadcast",False); source=SourceType.DM if is_user else SourceType.CHANNEL if is_channel else SourceType.TOPIC if topic else SourceType.GROUP
         did=str(eid if is_user else int(f"-100{eid}")); did=f"{did}:{topic}" if topic else did
-        return DialogRef(did,source,getattr(e,"title",None) or " ".join(filter(None,[getattr(e,"first_name",None),getattr(e,"last_name",None)])),getattr(e,"username",None),int(str(did).split(':')[0]),topic,str(did),whitelisted)
+        return DialogRef(did,source,getattr(e,"title",None) or " ".join(filter(None,[getattr(e,"first_name",None),getattr(e,"last_name",None)])),getattr(e,"username",None),int(str(did).split(':')[0]),topic,str(did),whitelisted,top_id)
     async def fetch_since(self,dialog,last_id,limit):
         entity=await self._entity(dialog.dialog_id.split(":")[0]); found=[]
         try:
