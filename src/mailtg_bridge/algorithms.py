@@ -1,11 +1,21 @@
 from __future__ import annotations
 import random, re
 from datetime import datetime, timedelta, timezone
-from .domain import BackoffDecision, DialogBatch, DialogRef, MentionPolicy, SourceType, TgMessage
+from .domain import BackoffDecision, BotPolicy, DialogBatch, DialogRef, MentionPolicy, SourceType, TgMessage
 from .errors import FloodWait
 
+def _bot_allowed(message: TgMessage, policy: BotPolicy, bot_list: set[str] | frozenset[str]) -> bool:
+    if policy is BotPolicy.ALL: return True
+    if policy is BotPolicy.NONE: return False
+    listed={b.lower().lstrip("@") for b in bot_list}  # bot_list entries are @username or numeric id
+    uname=(message.sender.username or "").lower().lstrip("@")
+    sid=str(message.sender.sender_id) if message.sender.sender_id is not None else ""
+    return (bool(uname) and uname in listed) or (bool(sid) and sid in listed)
+
 def is_addressed(message: TgMessage, dialog: DialogRef, whitelist: set[str] | frozenset[str],
-                 policy: MentionPolicy, mention_list: set[str] | frozenset[str], username: str | None=None) -> bool:
+                 policy: MentionPolicy, mention_list: set[str] | frozenset[str], username: str | None=None,
+                 bot_policy: BotPolicy=BotPolicy.ALL, bot_list: set[str] | frozenset[str]=frozenset()) -> bool:
+    if message.sender.is_bot and not _bot_allowed(message, bot_policy, bot_list): return False
     if dialog.source_type is SourceType.DM: return True
     ids={dialog.dialog_id}
     if dialog.username: ids.add("@"+dialog.username.lower().lstrip("@"))

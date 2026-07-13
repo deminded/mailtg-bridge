@@ -54,6 +54,43 @@ The supplied systemd unit uses one long-running process, a dedicated user,
 0077 umask and restricted writable paths. Install it from `deploy/` after
 adjusting the virtualenv path.
 
+## Filtering and delivery options
+
+`BOT_POLICY` controls messages authored by Telegram bots: `all` (default,
+v0.1 behaviour), `none` (never bridged), or `selected` (only bots whose
+`@username` is listed in `BOT_LIST_JSON`). This applies on top of the normal
+DM / whitelist / mention gating.
+
+`SAVE_SENT_COPY=true` (default) mirrors every email the bridge sends into the
+`SENT_FOLDER` (default `Sent`) of mailbox B over IMAP. SMTP submission leaves no
+server-side record on many providers, so without this you cannot audit what the
+bridge actually delivered. The copy is best-effort — a failure is logged and
+never blocks delivery.
+
+Outbound replies strip the quoted original (the tail your mail client appends
+below your text): `>`-quoted lines, `<blockquote>`/gmail-style HTML quote
+containers, and attribution lines in several locales (`… wrote:`, `… писал(а):`,
+forwarded-message banners). Only your own top-posted text is posted to Telegram.
+Bottom-posting (writing below the quote) is not supported in v1.
+
+## Deliverability (set this up or mail will silently vanish)
+
+Mailbox B sends from its own domain. If that domain has no **SPF**, **DKIM** and
+**DMARC** records, receiving providers (Gmail, Yandex, corporate filters) may
+**silently drop** bridged mail — no bounce, not even a spam-folder copy. During
+live testing a delivery disappeared for exactly this reason. Before relying on
+the bridge:
+
+- **SPF:** publish a TXT record for B's domain authorizing its SMTP host,
+  e.g. `v=spf1 include:<provider> -all`.
+- **DKIM:** enable signing at B's mail provider and publish the provided
+  selector key.
+- **DMARC:** publish `_dmarc` TXT, e.g. `v=DMARC1; p=none; rua=mailto:…` to
+  start, tightening to `quarantine`/`reject` once SPF+DKIM pass.
+
+Verify with any DMARC/SPF checker before depending on delivery. A dedicated
+subdomain for B keeps this isolated from your main mail reputation.
+
 ## Security
 The Telethon session grants full account access. Never commit it or the env
 file. Secrets, tokens, sessions and message bodies are excluded from structured

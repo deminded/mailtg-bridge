@@ -1,5 +1,5 @@
 from __future__ import annotations
-import hashlib, html, smtplib, ssl, uuid
+import hashlib, html, imaplib, logging, smtplib, ssl, time, uuid
 from email.message import EmailMessage
 from email.policy import SMTP
 from email.utils import formatdate
@@ -8,6 +8,8 @@ from .algorithms import build_deeplink
 from .config import SecurityMode, Settings
 from .domain import DialogBatch, DownloadedMedia, MailDraft, SentMail
 from .errors import MailAuthError, MailSizeRejected, Transient
+
+log=logging.getLogger(__name__)
 
 def make_message_id(domain: str) -> str: return f"<{uuid.uuid4().hex}@{domain}>"
 
@@ -76,7 +78,24 @@ class SmtpMailer:
             if exc.smtp_code in {552,554}: raise MailSizeRejected("SMTP rejected message size") from exc
             raise Transient("SMTP rejected message") from exc
         except (OSError,smtplib.SMTPException) as exc: raise Transient("SMTP delivery failed") from exc
+        self._archive_sent(draft.raw)
         return SentMail(draft.message_id,draft.dialog_id or "",__import__('mailtg_bridge.domain',fromlist=['SourceType']).SourceType.DM,self.s.b_address)
+    def _archive_sent(self,raw: bytes) -> None:
+        # SMTP send leaves no server-side trace on many providers, so the user can't
+        # verify what the bridge actually delivered. Mirror each sent message into B's
+        # Sent folder. Best-effort: a failed archive must never fail the delivery.
+        if not self.s.save_sent_copy: return
+        ctx=ssl.create_default_context()
+        try:
+            if self.s.b_imap_security is SecurityMode.SSL: m=imaplib.IMAP4_SSL(self.s.b_imap_host,self.s.b_imap_port,ssl_context=ctx,timeout=120)
+            else:
+                m=imaplib.IMAP4(self.s.b_imap_host,self.s.b_imap_port,timeout=120); m.starttls(ssl_context=ctx)
+            try:
+                m.login(self.s.b_username,self.s.b_password); m.append(self.s.sent_folder,r"(\Seen)",imaplib.Time2Internaldate(time.time()),raw)
+            finally:
+                try: m.logout()
+                except Exception: pass
+        except Exception as exc: log.warning("sent-copy archive failed",extra={"operation":"archive","error_class":type(exc).__name__})
     def send_notice(self,subject,body):
         msg=EmailMessage(); mid=make_message_id(self.s.b_address.split('@')[-1]); msg['From']=self.s.b_address; msg['To']=self.s.u_address; msg['Subject']=subject; msg['Message-ID']=mid; msg.set_content(body)
         self.send(MailDraft(mid,self.s.u_address,subject,msg.as_bytes(policy=SMTP))); return mid

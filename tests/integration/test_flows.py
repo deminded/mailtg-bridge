@@ -49,3 +49,22 @@ def test_tail_bootstrap_is_silent(tmp_path):
     with SQLiteStore(s.state_db_path) as st:
         st.set_session(True); asyncio.run(BridgeService(s,st,Tg(d,[TgMessage(5,d.dialog_id,datetime.now(timezone.utc))]),In(),out).run_inbound_cycle())
         assert st.get_cursor(d).last_id==5 and not out.sent
+
+class ScaleTg:
+    # counts NETWORK round-trips (fetch_since); the top-id gate must keep this O(active).
+    def __init__(self,dialogs): self.dialogs=dialogs; self.fetch_calls=0
+    async def list_tracked_dialogs(self): return self.dialogs
+    async def fetch_since(self,dialog,last_id,limit): self.fetch_calls+=1; return []
+    async def download_media(self,m): return []
+    async def post_as_user(self,d,t): return 1
+
+def test_polling_is_sublinear_in_dialog_count(tmp_path):
+    # TKT-12 load-profile invariant: a cycle over N idle dialogs must not fetch each one.
+    # Only dialogs whose top message id is ahead of the cursor (active) hit the network.
+    s=settings(tmp_path); N=1000; active=5
+    dialogs=[DialogRef(f"u{i}",SourceType.DM,top_id=(200 if i<active else 100)) for i in range(N)]
+    with SQLiteStore(s.state_db_path) as st:
+        st.set_session(True)
+        for d in dialogs: st.advance_cursor(d,100)   # everyone caught up to id=100
+        tg=ScaleTg(dialogs); asyncio.run(BridgeService(s,st,tg,In(),Out()).run_inbound_cycle())
+        assert tg.fetch_calls==active, f"expected O(active)={active} network fetches, got {tg.fetch_calls} (O(N) regression)"

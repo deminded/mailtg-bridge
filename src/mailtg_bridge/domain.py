@@ -17,6 +17,11 @@ class MentionPolicy(str, Enum):
     SELECTED = "selected"
     FORCED_LIST = "forced_list"
 
+class BotPolicy(str, Enum):
+    NONE = "none"        # never bridge messages authored by bots
+    ALL = "all"          # treat bot messages like any other (v0.1 behaviour)
+    SELECTED = "selected"  # only bots whose @username is in bot_list
+
 class MailKind(str, Enum):
     REPLY = "reply"
     COMMAND = "command"
@@ -44,6 +49,7 @@ class Sender:
     display_name: str = ""
     username: str | None = None
     sender_id: int | None = None
+    is_bot: bool = False
 
 @dataclass(frozen=True, slots=True)
 class MessageEntity:

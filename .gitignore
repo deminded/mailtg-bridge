@@ -4,6 +4,7 @@ masterspec/.work/
 output/
 *.pyc
 __pycache__/
+runtime/
 secrets/
 *.session
 *.session-journal

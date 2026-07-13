@@ -64,7 +64,7 @@ class TelethonGateway:
             return sorted(found,key=lambda x:x.msg_id)
         except Exception as exc: raise classify_error(exc) from exc
     def _message(self,d,m):
-        sender_obj=getattr(m,"sender",None); sender=Sender(getattr(sender_obj,"first_name",None) or getattr(sender_obj,"title","") or "",getattr(sender_obj,"username",None),getattr(sender_obj,"id",None))
+        sender_obj=getattr(m,"sender",None); sender=Sender(getattr(sender_obj,"first_name",None) or getattr(sender_obj,"title","") or "",getattr(sender_obj,"username",None),getattr(sender_obj,"id",None),bool(getattr(sender_obj,"bot",False)))
         entities=tuple(MessageEntity(type(e).__name__.removeprefix("MessageEntity").lower(),e.offset,e.length,getattr(e,"url",None)) for e in (getattr(m,"entities",None) or ()))
         media=()
         if getattr(m,"media",None):

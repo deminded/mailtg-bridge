@@ -6,7 +6,7 @@ from enum import Enum
 from pathlib import Path
 from email.utils import parseaddr
 
-from .domain import MentionPolicy
+from .domain import BotPolicy, MentionPolicy
 from .errors import ConfigError
 
 class SecurityMode(str, Enum):
@@ -56,6 +56,8 @@ class Settings:
     retention_max_consumed: int = 50000; retention_max_echo: int = 10000
     echo_retention_seconds: int = 7*86400; bootstrap_mode: BootstrapMode = BootstrapMode.TAIL
     discover_all_dialogs: bool = False; log_level: str = "INFO"
+    bot_policy: BotPolicy = BotPolicy.ALL; bot_list: tuple[str, ...] = ()
+    save_sent_copy: bool = True; sent_folder: str = "Sent"
 
     @classmethod
     def from_env(cls, path: str | Path | None = None, environ: dict[str,str] | None = None) -> "Settings":
@@ -82,7 +84,11 @@ class Settings:
             smsec=SecurityMode(data.get("B_SMTP_SECURITY","ssl").lower())
             mp=MentionPolicy(data.get("MENTION_POLICY","selected").lower())
             bm=BootstrapMode(data.get("BOOTSTRAP_MODE","tail").lower())
+            bp=BotPolicy(data.get("BOT_POLICY","all").lower())
+            bl=tuple(canonical_source(x) for x in json.loads(data.get("BOT_LIST_JSON","[]")))
         except (ValueError, TypeError, json.JSONDecodeError) as exc: raise ConfigError("invalid enum or JSON setting") from exc
+        save_sent=data.get("SAVE_SENT_COPY","true").lower() in {"1","true","yes"}
+        sent_folder=(data.get("SENT_FOLDER","Sent") or "Sent").strip()
         s=cls(integer("TG_API_ID",0),data["TG_API_HASH"],absolute("TG_SESSION_PATH"),_email(data["B_ADDRESS"],"B_ADDRESS"),
             data["B_USERNAME"],data["B_PASSWORD"],data["B_IMAP_HOST"],integer("B_IMAP_PORT",993),imsec,
             data["B_SMTP_HOST"],integer("B_SMTP_PORT",465),smsec,_email(data["U_ADDRESS"],"U_ADDRESS"),wl,mp,ml,
@@ -92,7 +98,8 @@ class Settings:
             integer("BACKOFF_MAX_SECONDS",3600),data.get("COMMAND_TOKEN",""),data.get("TIMEZONE","America/Phoenix"),
             integer("RETENTION_SECONDS",90*86400),integer("RETENTION_MAX_LEDGER",50000),integer("RETENTION_MAX_CONSUMED",50000),
             integer("RETENTION_MAX_ECHO",10000),integer("ECHO_RETENTION_SECONDS",7*86400),bm,
-            data.get("DISCOVER_ALL_DIALOGS","").lower() in {"1","true","yes"},data.get("LOG_LEVEL","INFO").upper())
+            data.get("DISCOVER_ALL_DIALOGS","").lower() in {"1","true","yes"},data.get("LOG_LEVEL","INFO").upper(),
+            bp,bl,save_sent,sent_folder)
         if s.attachment_threshold_bytes >= s.email_size_limit_bytes: raise ConfigError("attachment threshold must be below email size limit")
         if s.echo_retention_seconds > s.retention_seconds: raise ConfigError("echo retention cannot exceed retention")
         if s.backoff_min_seconds > s.backoff_max_seconds: raise ConfigError("backoff min cannot exceed max")

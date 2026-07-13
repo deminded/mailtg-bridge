@@ -3,7 +3,8 @@ from email import message_from_bytes
 from email.policy import default
 from mailtg_bridge.config import Settings
 from mailtg_bridge.domain import *
-from mailtg_bridge.mail_out import EmailComposer
+from mailtg_bridge.mail_out import EmailComposer, SmtpMailer
+import mailtg_bridge.mail_out as mo
 from tests.helpers import settings_env as env
 
 def test_mime_plain_html_and_exact_limit(tmp_path):
@@ -51,3 +52,29 @@ def test_body_shows_author_and_deeplink(tmp_path):
     html=message_from_bytes(raw,policy=default).get_body(('html',)).get_content()
     assert 'Alice' in html, "author name must be shown in body (TKT-10)"
     assert 'https://t.me/mychan/42' in html, "deep-link to the message must be present"
+
+class _FakeImap:
+    appended=[]
+    def __init__(self,*a,**k): pass
+    def login(self,u,p): pass
+    def append(self,folder,flags,dt,raw): _FakeImap.appended.append((folder,raw))
+    def logout(self): pass
+
+def test_sent_copy_archives_when_enabled(tmp_path,monkeypatch):
+    # TKT-14: SMTP leaves no server-side trace -> mirror to B's Sent so the user can verify.
+    _FakeImap.appended=[]; monkeypatch.setattr(mo.imaplib,'IMAP4_SSL',_FakeImap)
+    e=env(tmp_path); e['SAVE_SENT_COPY']='true'; e['SENT_FOLDER']='Sent'
+    SmtpMailer(Settings.from_env(environ=e))._archive_sent(b'RAW')
+    assert _FakeImap.appended==[('Sent',b'RAW')]
+
+def test_sent_copy_skipped_when_disabled(tmp_path,monkeypatch):
+    def boom(*a,**k): raise AssertionError("IMAP must not open when SAVE_SENT_COPY is off")
+    monkeypatch.setattr(mo.imaplib,'IMAP4_SSL',boom)
+    e=env(tmp_path); e['SAVE_SENT_COPY']='false'
+    SmtpMailer(Settings.from_env(environ=e))._archive_sent(b'RAW')  # must be a no-op
+
+def test_sent_copy_error_never_breaks_delivery(tmp_path,monkeypatch):
+    class Boom:
+        def __init__(self,*a,**k): raise OSError("imap unreachable")
+    monkeypatch.setattr(mo.imaplib,'IMAP4_SSL',Boom)
+    SmtpMailer(Settings.from_env(environ=env(tmp_path)))._archive_sent(b'RAW')  # swallowed

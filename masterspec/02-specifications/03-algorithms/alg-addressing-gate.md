@@ -46,3 +46,11 @@ updated: 2026-07-12
 - Правила: -> rules-gating
 - Сценарии: -> scn-inbound-collect-cycle
 - Компоненты: -> cmp-tg-gateway
+
+---
+## Evolve-дельта (13.07, живой тест)
+**Ветка ботов (перед DM-проходом):** если `message.sender.is_bot`:
+- `bot_policy=none` → отсеять;
+- `bot_policy=all` → продолжить обычный гейт (для DM — пропуск);
+- `bot_policy=selected` → пропустить только если @username бота ∈ `bot_list`, иначе отсеять.
+Не-бот сообщения политикой ботов не затрагиваются. Сигнатура: `is_addressed(..., bot_policy, bot_list)`.

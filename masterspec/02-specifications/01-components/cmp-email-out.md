@@ -85,3 +85,11 @@ updated: 2026-07-12
 - Алгоритмы: -> alg-oversize-degrade
 - API: -> api-mailbox-imap-smtp
 - Данные: -> data-bridge-store
+
+---
+## Evolve-дельта (13.07, живой тест)
+**Sent-копия (TKT-14).** После успешного SMTP `SmtpMailer.send` вызывает `_archive_sent(raw)`:
+если `save_sent_copy` — открыть IMAP к B (та же security-политика), `APPEND` в `sent_folder` с флагом
+`\Seen`, затем logout. Всё в try/except: любой сбой архивации логируется (warning, operation=archive)
+и НЕ пробрасывается — доставка уже состоялась. Папка Sent не читается поллером (poll = только INBOX),
+петли нет.

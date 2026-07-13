@@ -46,7 +46,8 @@ class BridgeService:
                 if cursor.last_id==0 and self.s.bootstrap_mode is BootstrapMode.TAIL:
                     self.store.advance_cursor(dialog,high); self.store.clear_backoff(scope); continue
                 selected=[m for m in messages if m.msg_id>cursor.last_id and not self.store.is_echo(dialog.dialog_id,m.msg_id)
-                    and is_addressed(m,dialog,set(self.s.whitelist),self.s.mention_policy,set(self.s.mention_list))]
+                    and is_addressed(m,dialog,set(self.s.whitelist),self.s.mention_policy,set(self.s.mention_list),
+                        bot_policy=self.s.bot_policy,bot_list=set(self.s.bot_list))]
                 if not selected: self.store.advance_cursor(dialog,high); self.store.clear_backoff(scope); continue
                 batch=make_dialog_batch(dialog,selected,high); downloaded={}
                 try:

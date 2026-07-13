@@ -48,3 +48,11 @@ updated: 2026-07-12
 ## Связи
 - Паспорт: -> as-mailtg-bridge
 - Функции: -> fn-dm-batch-to-email, -> fn-channel-update-to-email, -> fn-first-run-setup, -> fn-bridge-control-by-email
+
+---
+## Evolve-дельта (13.07, живой тест)
+- **NFR-OPS-LOAD (TKT-12, профиль нагрузки):** ожидаемый порядок числа диалогов — сотни–тысячи
+  (эмпирика живого теста: 806 личек на одном аккаунте). Инвариант масштабирования: такт inbound
+  делает сетевых round-trip ≈ O(активные), НЕ O(все) — неактивные диалоги отсекаются по top-id
+  (top_id ≤ курсор → пропуск без fetch). Индикатор: scale-тест N=1000 (k активных) → k фетчей.
+  Нарушение (fetch на каждый диалог) = регресс, ловится тестом `test_polling_is_sublinear_in_dialog_count`.
