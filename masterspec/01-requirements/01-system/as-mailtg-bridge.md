@@ -3,7 +3,7 @@ type: passport-as
 slug: as-mailtg-bridge
 factory: mailtg-bridge
 status: draft
-meta_model_version: 3.0-spec
+meta_model_version: 3.0
 owner: Евгений
 updated: 2026-07-13
 ---
