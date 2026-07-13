@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "data-bridge-store.schema.json",
+  "title": "Схема данных: персистентное состояние моста (data-bridge-store)",
+  "description": "Машинный сайдкар (produced_by: migrate) к data-bridge-store.md. Компаньон .md — источник истины (провенанс, стейт-машины YAML-блоком, ограничения); этот файл — проекция \"Сущности\"/\"Ключевые атрибуты\"/\"Связи между сущностями\" в JSON Schema 2020-12. Поля без явного логического типа в исходной прозе несут \"x-migrate-todo\" (JSON не имеет # -комментариев) вместо type — см. migration-report.md за сквозной нумерацией TODO.",
+  "$defs": {
+    "SourceType": {
+      "type": "string",
+      "enum": ["dm", "channel", "group", "topic"],
+      "description": "-> dict-source-type"
+    },
+    "DialogCursor": {
+      "type": "object",
+      "description": "Отметка \"докуда прочитан диалог\"; ключ дедупа доставки.",
+      "properties": {
+        "dialog_id": {
+          "type": "string",
+          "description": "идентификатор, ключ; формат не указан (не UUID) — см. правило конвертации \"идентификатор\""
+        },
+        "source_type": { "$ref": "#/$defs/SourceType" },
+        "last_id": {
+          "type": "integer",
+          "description": "число, монотонный high-watermark — макс. выбранный в такте msg_id"
+        },
+        "whitelisted": { "type": "boolean" },
+        "source_tag": { "type": "string" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["dialog_id", "source_type", "last_id"]
+    },
+    "LedgerRecord": {
+      "type": "object",
+      "description": "Запись связки (ledger) — связь мостового письма с диалогом; ключ маршрутизации ответа.",
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "description": "идентификатор письма, ключ, уникален; формат не указан"
+        },
+        "dialog_id": {
+          "type": "string",
+          "description": "идентификатор, внешняя ссылка на DialogCursor"
+        },
+        "source_type": { "$ref": "#/$defs/SourceType" },
+        "sender": {
+          "type": "string",
+          "description": "отправитель исходного сообщения/тег"
+        },
+        "delivered_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["message_id", "dialog_id"]
+    },
+    "ConsumeMarker": {
+      "type": "object",
+      "description": "Маркер потребления — идентификаторы обработанных писем-ответов/команд (идемпотентность приёма).",
+      "properties": {
+        "mail_ref": {
+          "type": "string",
+          "description": "идентификатор письма: message_id/UID, ключ, уникален"
+        },
+        "consumed_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["mail_ref"]
+    },
+    "EchoMarker": {
+      "type": "object",
+      "description": "Маркер эха — идентификаторы сообщений, опубликованных мостом (анти-петля).",
+      "properties": {
+        "posted_msg_id": {
+          "type": "string",
+          "description": "идентификатор сообщения в диалоге, ключ"
+        },
+        "dialog_id": { "type": "string" },
+        "posted_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["posted_msg_id", "dialog_id"]
+    },
+    "BridgeState": {
+      "type": "object",
+      "description": "Состояние моста — singleton-переключатель доставки (включён/выключен).",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["enabled"]
+    },
+    "SessionState": {
+      "type": "object",
+      "description": "Состояние сессии — singleton-здоровье сессии (действительна/недействительна).",
+      "properties": {
+        "valid": { "type": "boolean" },
+        "notified": {
+          "type": "boolean",
+          "description": "уведомление о недействительности отправлено"
+        },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["valid", "notified"]
+    },
+    "MailCredentials": {
+      "type": "object",
+      "description": "один логин/пароль ящика B, общий для IMAP и SMTP. from: config.py:46 (b_username: str; b_password: str) — используется и в mail_in.py:113 (ImapMailbox._connect m.login), и в mail_out.py:106,125 (SmtpMailer login) — одна и та же пара.",
+      "properties": {
+        "username": { "type": "string", "description": "секрет — from: config.py:46 b_username / data-config.schema.json:17 B_USERNAME" },
+        "password": { "type": "string", "description": "секрет — from: config.py:46 b_password / data-config.schema.json:18 B_PASSWORD" }
+      }
+    },
+    "SourceRef": {
+      "type": "string",
+      "description": "canonical_source: @username (>=3 симв., регистронезависимо) либо числовой id (со знаком), опционально :topic_id. from: config.py:37-41 (canonical_source()) + data-config.schema.json:33-40 (WHITELIST_JSON.items)"
+    },
+    "Configuration": {
+      "type": "object",
+      "description": "Конфигурация — параметры развёртывания (только чтение; источник — файл вне репозитория). Детальный флоский контракт значений — -> data-config; здесь — логическая проекция для связей внутри state-схемы (не домысливать поля из data-config сюда без факта в ЭТОМ файле).",
+      "properties": {
+        "tg_access": {
+          "type": "object",
+          "description": "доступ Telegram (App ID/Hash); session_path — соседнее поле этой же сущности. from: config.py:45 (tg_api_id: int; tg_api_hash: str) + data-config.schema.json:13-14 (TG_API_ID/TG_API_HASH)",
+          "properties": {
+            "api_id": { "type": "integer", "description": "from: config.py:45 tg_api_id / data-config.schema.json:13 TG_API_ID" },
+            "api_hash": { "type": "string", "description": "секрет — from: config.py:45 tg_api_hash / data-config.schema.json:14 TG_API_HASH" }
+          }
+        },
+        "session_path": {
+          "type": "string",
+          "description": "строка-путь"
+        },
+        "B_imap": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string", "description": "from: config.py:47 (b_imap_host: str) + data-config.schema.json:19 (B_IMAP_HOST)" },
+            "port": { "type": "integer", "description": "from: config.py:47 (b_imap_port: int, >0) + data-config.schema.json:26 (B_IMAP_PORT, default 993)" },
+            "credentials": { "$ref": "#/$defs/MailCredentials" }
+          }
+        },
+        "B_smtp": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string", "description": "from: config.py:48 (b_smtp_host: str) + data-config.schema.json:20 (B_SMTP_HOST)" },
+            "port": { "type": "integer", "description": "from: config.py:48 (b_smtp_port: int, >0) + data-config.schema.json:27 (B_SMTP_PORT, default 465)" },
+            "credentials": { "$ref": "#/$defs/MailCredentials" }
+          }
+        },
+        "U_address": {
+          "type": "string",
+          "description": "строка-адрес"
+        },
+        "whitelist": {
+          "type": "array",
+          "description": "набор источников",
+          "items": { "$ref": "#/$defs/SourceRef" }
+        },
+        "mention_policy": {
+          "type": "string",
+          "enum": ["все", "выбранные", "форсирование по списку"]
+        },
+        "mention_list": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceRef" }
+        },
+        "attachment_threshold": {
+          "type": "integer",
+          "description": "порог размера вложения в байтах (не-изображение крупнее — деградация в notice-only, -> dict-media-disposition). from: config.py:51 (attachment_threshold_bytes: int, default 10*1024*1024) + data-config.schema.json:58 (ATTACHMENT_THRESHOLD_BYTES, default 10485760)"
+        },
+        "email_size_limit": {
+          "type": "integer",
+          "description": "лимит размера письма в байтах (-> alg-oversize-degrade). from: config.py:52 (email_size_limit_bytes: int, default 24*1024*1024) + data-config.schema.json:59 (EMAIL_SIZE_LIMIT_BYTES, default 25165824)"
+        },
+        "retention": {
+          "type": "object",
+          "description": "составное: legacy-ярлык «retention» в реальном коде — пять раздельных полей Settings (config.py:55-57), не одно значение. from: config.py:55-57 + data-config.schema.json:63-67",
+          "properties": {
+            "retention_seconds": { "type": "integer", "description": "секунды. from: config.py:55 (default 90*86400) + data-config.schema.json:63 (default 7776000)" },
+            "retention_max_ledger": { "type": "integer", "description": "макс. записей журнала связки. from: config.py:55 (default 50000) + data-config.schema.json:64" },
+            "retention_max_consumed": { "type": "integer", "description": "макс. маркеров потребления. from: config.py:56 (default 50000) + data-config.schema.json:65" },
+            "retention_max_echo": { "type": "integer", "description": "макс. эхо-маркеров. from: config.py:56 (default 10000) + data-config.schema.json:66" },
+            "echo_retention_seconds": { "type": "integer", "description": "секунды, анти-петля окно (НЕ ДОЛЖНО превышать retention_seconds). from: config.py:57 (default 7*86400) + data-config.schema.json:67 (default 604800)" }
+          }
+        },
+        "collect_interval": {
+          "type": "integer",
+          "description": "секунды (не ISO-8601 duration — целое число секунд такта). from: config.py:52 (collect_interval_seconds: int, default 60) + data-config.schema.json:55 (COLLECT_INTERVAL_SECONDS)"
+        },
+        "send_interval": {
+          "type": "integer",
+          "description": "секунды. from: config.py:53 (send_interval_seconds: int, default 30) + data-config.schema.json:56 (SEND_INTERVAL_SECONDS)"
+        },
+        "command_token": {
+          "type": "string",
+          "description": "строка, опционально"
+        }
+      }
+    }
+  }
+}

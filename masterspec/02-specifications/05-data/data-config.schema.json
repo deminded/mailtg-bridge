@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "data-config.schema.json",
+  "title": "Схема данных: контракт конфигурации (data-config)",
+  "description": "Машинный сайдкар (produced_by: migrate) к data-config.md. Плоская config-схема (без ER-сущностей/связей, -> migration-rules.md §2 оговорка): свойства идут прямо в properties. Кросс-полевая валидация (раздел «Валидация и связи между параметрами» источника) НЕ выражается схемой — логические ограничения остаются в компаньоне .md (-> migration-rules.md §2).",
+  "type": "object",
+  "required": [
+    "TG_API_ID", "TG_API_HASH", "TG_SESSION_PATH", "B_ADDRESS", "B_USERNAME",
+    "B_PASSWORD", "B_IMAP_HOST", "B_SMTP_HOST", "U_ADDRESS", "STATE_DB_PATH",
+    "LOCK_PATH", "TEMP_DIR"
+  ],
+  "properties": {
+    "TG_API_ID": { "type": "integer", "exclusiveMinimum": 0, "description": "ID приложения Telegram (my.telegram.org)" },
+    "TG_API_HASH": { "type": "string", "description": "секрет — Hash приложения Telegram" },
+    "TG_SESSION_PATH": { "type": "string", "description": "путь (абсолютный) — секрет, файл сессии Telethon" },
+    "B_ADDRESS": { "type": "string", "format": "email", "description": "адрес почтового ящика моста B" },
+    "B_USERNAME": { "type": "string", "description": "секрет — логин IMAP/SMTP ящика B" },
+    "B_PASSWORD": { "type": "string", "description": "секрет — пароль/app-пароль ящика B" },
+    "B_IMAP_HOST": { "type": "string" },
+    "B_SMTP_HOST": { "type": "string" },
+    "U_ADDRESS": { "type": "string", "format": "email", "description": "адрес пользователя U" },
+    "STATE_DB_PATH": { "type": "string", "description": "путь (абсолютный) — -> data-bridge-store" },
+    "LOCK_PATH": { "type": "string", "description": "путь (абсолютный)" },
+    "TEMP_DIR": { "type": "string", "description": "путь (абсолютный)" },
+
+    "B_IMAP_PORT": { "type": "integer", "exclusiveMinimum": 0, "default": 993 },
+    "B_SMTP_PORT": { "type": "integer", "exclusiveMinimum": 0, "default": 465 },
+    "B_IMAP_SECURITY": { "type": "string", "enum": ["ssl", "starttls"], "default": "ssl" },
+    "B_SMTP_SECURITY": { "type": "string", "enum": ["ssl", "starttls"], "default": "ssl" },
+    "SAVE_SENT_COPY": { "type": "boolean", "default": true },
+    "SENT_FOLDER": { "type": "string", "default": "Sent" },
+
+    "WHITELIST_JSON": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "description": "canonical_source: @username (>=3 симв.) либо числовой id, опционально :topic_id"
+      }
+    },
+    "MENTION_POLICY": { "type": "string", "enum": ["all", "selected", "forced_list"], "default": "selected" },
+    "MENTION_LIST_JSON": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "description": "canonical_source — см. WHITELIST_JSON" }
+    },
+    "DISCOVER_ALL_DIALOGS": { "type": "boolean", "default": false },
+    "BOT_POLICY": { "type": "string", "enum": ["none", "all", "selected"], "default": "all" },
+    "BOT_LIST_JSON": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "description": "@username бота" }
+    },
+
+    "COLLECT_INTERVAL_SECONDS": { "type": "integer", "exclusiveMinimum": 0, "default": 60 },
+    "SEND_INTERVAL_SECONDS": { "type": "integer", "exclusiveMinimum": 0, "default": 30 },
+    "TG_FETCH_LIMIT": { "type": "integer", "exclusiveMinimum": 0, "default": 100 },
+    "ATTACHMENT_THRESHOLD_BYTES": { "type": "integer", "exclusiveMinimum": 0, "default": 10485760 },
+    "EMAIL_SIZE_LIMIT_BYTES": { "type": "integer", "exclusiveMinimum": 0, "default": 25165824 },
+    "BACKOFF_MIN_SECONDS": { "type": "integer", "exclusiveMinimum": 0, "default": 30 },
+    "BACKOFF_MAX_SECONDS": { "type": "integer", "exclusiveMinimum": 0, "default": 3600 },
+
+    "RETENTION_SECONDS": { "type": "integer", "exclusiveMinimum": 0, "default": 7776000 },
+    "RETENTION_MAX_LEDGER": { "type": "integer", "exclusiveMinimum": 0, "default": 50000 },
+    "RETENTION_MAX_CONSUMED": { "type": "integer", "exclusiveMinimum": 0, "default": 50000 },
+    "RETENTION_MAX_ECHO": { "type": "integer", "exclusiveMinimum": 0, "default": 10000 },
+    "ECHO_RETENTION_SECONDS": { "type": "integer", "exclusiveMinimum": 0, "default": 604800 },
+
+    "COMMAND_TOKEN": { "type": "string", "default": "", "description": "секрет — пусто = не требуется" },
+    "BOOTSTRAP_MODE": { "type": "string", "enum": ["tail", "history"], "default": "tail" },
+    "TIMEZONE": { "type": "string", "default": "America/Phoenix", "description": "IANA tz" },
+    "LOG_LEVEL": { "type": "string", "default": "INFO" }
+  }
+}

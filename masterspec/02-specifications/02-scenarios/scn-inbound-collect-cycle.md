@@ -5,6 +5,8 @@ factory: mailtg-bridge
 status: draft
 owner: Евгений
 updated: 2026-07-12
+notation: yaml-graph
+produced_by: migrate
 ---
 # Сценарий: Такт сбора входящих (Telegram → письмо-батч)
 
