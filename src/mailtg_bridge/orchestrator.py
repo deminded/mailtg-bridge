@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from .algorithms import is_addressed, make_dialog_batch, next_backoff
 from .commands import parse_command
 from .config import BootstrapMode, Settings
-from .domain import SentMail
-from .errors import FloodWait, PeerNotFound, SessionInvalid, Transient
+from .domain import DownloadedMedia, SentMail
+from .errors import FloodWait, MediaUnavailable, PeerNotFound, SessionInvalid, Transient
 from .mail_in import MailClassifier
 
 log=logging.getLogger(__name__)
@@ -52,7 +52,13 @@ class BridgeService:
                 batch=make_dialog_batch(dialog,selected,high); downloaded={}
                 try:
                     for message in selected:
-                        if message.media: downloaded[message.msg_id]=await self.tg.download_media(message)
+                        if not message.media: continue
+                        try: downloaded[message.msg_id]=await self.tg.download_media(message)
+                        except MediaUnavailable:
+                            # degrade to a visible marker instead of losing the whole batch to one bad
+                            # media file (fn-media-in-email/OE-EVIDENCE); path is never created, so the
+                            # finally-block unlink below is a safe no-op (missing_ok).
+                            downloaded[message.msg_id]=[DownloadedMedia(r,self.s.temp_dir/f"unavailable-{message.msg_id}-{r.media_id}",0,available=False) for r in message.media]
                     drafts=self.composer.compose_batch(batch,downloaded); sent=[]
                     for draft in drafts:
                         result=self.mail_out.send(draft); sent.append(SentMail(result.message_id,dialog.dialog_id,dialog.source_type,result.sender))
@@ -85,6 +91,7 @@ class BridgeService:
             parent=self.store.ledger_dialog(parents)
             if not parent: continue
             if not self.delivery_allowed() or not mail.body_text: continue
+            if not self._due(f"tg:post:{parent}"): continue  # honor the scoped backoff record_failure wrote below; symmetric to run_inbound_cycle's per-dialog gate
             try:
                 posted=await self.tg.post_as_user(parent,mail.body_text)
                 self.store.commit_reply(mail.mail_ref,parent,posted)
