@@ -6,12 +6,39 @@ from email.utils import formatdate
 from pathlib import Path
 from .algorithms import build_deeplink
 from .config import SecurityMode, Settings
-from .domain import DialogBatch, DownloadedMedia, MailDraft, SentMail
+from .domain import DialogBatch, DownloadedMedia, MailDraft, SentMail, SourceType
 from .errors import MailAuthError, MailSizeRejected, Transient
 
 log=logging.getLogger(__name__)
 
 def make_message_id(domain: str) -> str: return f"<{uuid.uuid4().hex}@{domain}>"
+
+# dict-source-type.md fixes the wire tag per source type; reply-routing keys off the dialog
+# named here, so the tag is contract not decoration.
+_SOURCE_TAG={SourceType.DM:"dm",SourceType.CHANNEL:"ch",SourceType.GROUP:"gr",SourceType.TOPIC:"gr"}
+_ENTITY_TAG={"bold":"b","italic":"i","code":"code","pre":"pre"}
+
+def render_entities(text: str, entities) -> str:
+    # Telegram carries formatting as offset/length spans, not markup; without this a bold/
+    # italic/code/pre/text-link message shows up as flat plain text in the email.
+    if not entities: return html.escape(text)
+    starts: dict[int,list] = {}; ends: dict[int,list] = {}
+    for e in entities:
+        starts.setdefault(e.offset,[]).append(e); ends.setdefault(e.offset+e.length,[]).append(e)
+    for lst in starts.values(): lst.sort(key=lambda e:-e.length)  # outer entity opens first when co-located
+    def tag(e,opening):
+        if e.kind=="texturl": return f'<a href="{html.escape(e.url or "")}">' if opening else "</a>"
+        t=_ENTITY_TAG.get(e.kind)
+        return (f"<{t}>" if opening else f"</{t}>") if t else ""
+    out=[]; stack: list=[]; i=0
+    for pos in sorted({0,len(text)}|set(starts)|set(ends)):
+        if pos>i: out.append(html.escape(text[i:pos]))
+        closing=[e for e in reversed(stack) if e.offset+e.length==pos]
+        out.extend(tag(e,False) for e in closing)
+        stack=[e for e in stack if e.offset+e.length!=pos]
+        for e in starts.get(pos,()): out.append(tag(e,True)); stack.append(e)
+        i=pos
+    return "".join(out)
 
 class EmailComposer:
     def __init__(self,settings: Settings): self.s=settings; self.domain=settings.b_address.split("@")[-1]
@@ -20,10 +47,13 @@ class EmailComposer:
         for m in batch.messages:
             link=build_deeplink(batch.dialog,m.msg_id); author=m.sender.display_name or m.sender.username or "Telegram"
             plain.append(f"{author} — {m.date.isoformat()}\n{m.text or '[media]'}"+(f"\n{link}" if link else ""))
-            body=html.escape(m.text or "[media]").replace("\n","<br>")
+            body=(render_entities(m.text,m.entities) if m.text else html.escape("[media]")).replace("\n","<br>")
             block=f"<article><b>{html.escape(author)}</b> <time>{html.escape(m.date.isoformat())}</time><p>{body}</p>"
             if link: block+=f'<a href="{html.escape(link)}">Open in Telegram</a>'
             for dm in media.get(m.msg_id,()):
+                if not dm.available:
+                    # download failed (MediaUnavailable) -> explicit marker, not a silently dropped message
+                    marker=f"[media unavailable: {dm.ref.content_type}]"; block+=f"<p>{html.escape(marker)}</p>"; plain[-1]+="\n"+marker; continue
                 key=str(dm.path)
                 if key in omitted or (not dm.ref.content_type.startswith("image/") and dm.size>self.s.attachment_threshold_bytes):
                     marker=f"[omitted media: {dm.ref.content_type}, {dm.size} bytes]"; block+=f"<p>{html.escape(marker)}</p>"; plain[-1]+="\n"+marker; continue
@@ -36,7 +66,8 @@ class EmailComposer:
     def _message(self,batch,media,part,nparts,omitted=frozenset()):
         msg=EmailMessage(); mid=make_message_id(self.domain); msg["From"]=self.s.b_address; msg["To"]=self.s.u_address
         _name=batch.dialog.title or (f"@{batch.dialog.username}" if batch.dialog.username else batch.dialog.source_tag or batch.dialog.dialog_id)
-        base=f"Telegram: {_name}"
+        topic=f"/{batch.dialog.topic_id}" if batch.dialog.source_type is SourceType.TOPIC and batch.dialog.topic_id is not None else ""
+        base=f"{_SOURCE_TAG[batch.dialog.source_type]}:{_name}{topic}"
         msg["Subject"]=base+(f" ({part}/{nparts})" if nparts>1 else ""); msg["Message-ID"]=mid; msg["Date"]=formatdate(localtime=False)
         plain,markup,attachments=self._render(batch,media,omitted); msg.set_content(plain or "Telegram update"); msg.add_alternative(markup,subtype="html")
         html_part=msg.get_payload()[-1]

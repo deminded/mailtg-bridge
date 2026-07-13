@@ -70,6 +70,7 @@ class DownloadedMedia:
     ref: MediaRef
     path: Path
     size: int
+    available: bool = True  # False = download failed; composer renders a marker instead of reading `path`
 
 @dataclass(frozen=True, slots=True)
 class TgMessage:

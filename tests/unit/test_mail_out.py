@@ -43,6 +43,36 @@ def test_subject_shows_sender_name_not_numeric_id(tmp_path):
     assert 'Arête' in draft.subject or 'arete_limen' in draft.subject, f"subject must show sender name: {draft.subject!r}"
     assert '7209976320' not in draft.subject, f"subject must not be the bare numeric id: {draft.subject!r}"
 
+def test_entities_render_as_html_markup(tmp_path):
+    # DEFECT-3: _message() parses entities into TgMessage but _render() dropped them, so a
+    # bold/italic/code/pre/text-link message reached the email as flat plain text.
+    e=env(tmp_path); s=Settings.from_env(environ=e); c=EmailComposer(s)
+    d=DialogRef('d',SourceType.DM,title='D')
+    text='Hello world visit site now'
+    entities=(
+        MessageEntity('bold',0,5),          # "Hello"
+        MessageEntity('italic',6,5),        # "world"
+        MessageEntity('texturl',18,4,url='https://example.org'),  # "site"
+        MessageEntity('code',23,3),         # "now"
+    )
+    m=TgMessage(1,'d',datetime.now(timezone.utc),Sender('A'),text,entities)
+    raw=c.compose_batch(DialogBatch(d,(m,),1),{})[0].raw
+    html=message_from_bytes(raw,policy=default).get_body(('html',)).get_content()
+    assert '<b>Hello</b>' in html
+    assert '<i>world</i>' in html
+    assert '<a href="https://example.org">site</a>' in html
+    assert '<code>now</code>' in html
+
+def test_subject_shows_dm_and_channel_tags(tmp_path):
+    # DEFECT-4: Subject must carry the dict-source-type.md tag used for reply routing
+    # (dm:<sender> for DMs, ch:<name> for channels), not the decorative "Telegram: <name>".
+    e=env(tmp_path); s=Settings.from_env(environ=e); c=EmailComposer(s)
+    dm=DialogRef('123',SourceType.DM,title='Bob')
+    ch=DialogRef('@news',SourceType.CHANNEL,title='News',username='news')
+    for d,expected in ((dm,'dm:Bob'),(ch,'ch:News')):
+        draft=c.compose_batch(DialogBatch(d,(TgMessage(1,d.dialog_id,datetime.now(timezone.utc),Sender('X'),'hi'),),1),{})[0]
+        assert draft.subject.startswith(expected), f"{d.source_type}: {draft.subject!r}"
+
 def test_body_shows_author_and_deeplink(tmp_path):
     # TKT-10 presentation fidelity operationalised: HTML body must carry author + deep-link.
     e=env(tmp_path); s=Settings.from_env(environ=e); c=EmailComposer(s)
