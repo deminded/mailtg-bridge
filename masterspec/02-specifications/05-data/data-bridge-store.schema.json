@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "data-bridge-store.schema.json",
   "title": "Схема данных: персистентное состояние моста (data-bridge-store)",
-  "description": "Машинный сайдкар (produced_by: migrate) к data-bridge-store.md. Компаньон .md — источник истины (провенанс, стейт-машины YAML-блоком, ограничения); этот файл — проекция \"Сущности\"/\"Ключевые атрибуты\"/\"Связи между сущностями\" в JSON Schema 2020-12. Поля без явного логического типа в исходной прозе несут \"x-migrate-todo\" (JSON не имеет # -комментариев) вместо type — см. migration-report.md за сквозной нумерацией TODO.",
+  "description": "Машинный сайдкар (produced_by: migrate) к data-bridge-store.md. Компаньон .md — источник истины (провенанс, стейт-машины YAML-блоком, ограничения); этот файл — проекция \"Сущности\"/\"Ключевые атрибуты\"/\"Связи между сущностями\" в JSON Schema 2020-12. Каждое поле несёт явный логический тип с провенансом (from: config.py + data-config.schema.json); неоднозначного не осталось.",
   "$defs": {
     "SourceType": {
       "type": "string",
