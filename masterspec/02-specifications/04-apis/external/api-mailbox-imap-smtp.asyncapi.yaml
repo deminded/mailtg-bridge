@@ -1,13 +1,13 @@
 # Машинный сайдкар (produced_by: migrate) к api-mailbox-imap-smtp.md.
 # Компаньон .md — источник истины (провенанс, маппинги полей, ограничения); этот файл — проекция
 # "Операции / события" + "Контракт" в AsyncAPI 2.x (природа контракта: SMTP produce / IMAP consume,
-# -> patterns/sidecar-formats.md). Типы полей, не имевшие явного логического типа в исходной прозе
-# компаньона, помечены "#" MIGRATE-TODO-комментарием рядом (YAML допускает "#"-комментарии) —
-# см. migration-report.md в корне фабрики за сквозной нумерацией.
+# -> patterns/sidecar-formats.md). Типы полей восстановлены из кода mailtg и data-config (ссылки в
+# description каждого поля, см. migration-report.md §6); owner-decisions по нематериализованным полям
+# закрыты (14.07, «отражение кода») — accepted/consumed убраны, notices вынесены в операцию send-notice.
 asyncapi: '2.6.0'
 info:
   title: api-mailbox-imap-smtp
-  version: '0.1.0' # MIGRATE-TODO: версия контракта не зафиксирована в источнике (status: draft, не сертифицирован)
+  version: '1.0.0'
   description: >-
     Usage-контракт почтового аккаунта B (SMTP исходящее письмо / IMAP входящий опрос), как его
     потребляет мост mailtg-bridge. Компаньон: api-mailbox-imap-smtp.md.
@@ -39,6 +39,16 @@ channels:
       operationId: mark-consumed
       message:
         $ref: '#/components/messages/MarkConsumedRequest'
+  send-notice:
+    description: >-
+      Отправить служебное письмо-уведомление (подтверждение вкл/выкл, «сессия недействительна»)
+      с ящика B на адрес U по SMTP. Отдельная операция (не поле send-mail): в коде каждое
+      уведомление — свой вызов send_notice(subject, body) → message_id (mail_out.py:130-132).
+      owner-decision (14.07): notices[] вынесены из send-mail в эту операцию.
+    publish:
+      operationId: send-notice
+      message:
+        $ref: '#/components/messages/SendNoticeRequest'
 components:
   messages:
     SendMailRequest:
@@ -50,6 +60,9 @@ components:
     MarkConsumedRequest:
       payload:
         $ref: '#/components/schemas/MarkConsumedInput'
+    SendNoticeRequest:
+      payload:
+        $ref: '#/components/schemas/SendNoticeInput'
   schemas:
     SendMailInput:
       type: object
@@ -88,14 +101,6 @@ components:
           items:
             $ref: '#/components/schemas/MediaAttachment'
           description: "disposition attached-file -> dict-media-disposition; from: mail_out.py:58-59,80 (elif dm.size<=threshold: msg.add_attachment)"
-        notices:
-          type: array
-          items: {} # MIGRATE-TODO: остаётся O (не выводимо, см. комментарий ниже)
-          # (а) BridgeService-уведомления (on/off, session-invalid) — каждое своим вызовом send_notice(subject,body),
-          #     отдельное письмо, НЕ элемент массива внутри батча (mail_out.py:130-132, orchestrator.py:102-107).
-          # (б) markers "notice-only" -> dict-media-disposition (oversized non-image) вписаны строками прямо в
-          #     html_body/text_body (mail_out.py:58-59), не собираются в отдельный массив.
-          # Ни одно чтение кода не даёт структуры элемента notices[] — не домысливаю.
     MediaAttachment:
       type: object
       description: >-
@@ -115,11 +120,8 @@ components:
           description: "байты; from: domain.py:66,72 (MediaRef.size / DownloadedMedia.size) + mail_out.py:58,80 (dm.size)"
     SendMailSuccess:
       type: object
+      description: "успех send-mail = отсутствие исключения (SMTP-приём); объект несёт только message_id для записи связки. owner-decision (14.07): поле accepted убрано — код его не строит (успех неявен)."
       properties:
-        accepted: {} # MIGRATE-TODO: остаётся O (не выводимо) — в коде нет поля/переменной "accepted":
-          # SmtpMailer.send() (mail_out.py:100-113) не перехватывает и не сохраняет результат
-          # smtp.sendmail() (Python возвращает dict отклонённых адресатов — он отбрасывается); успех
-          # выражен только отсутствием исключения. Булево/статус не подобран — не домысливаю.
         message_id:
           type: string
     SendMailFailure:
@@ -180,13 +182,27 @@ components:
           description: "объявлено схемой, но НЕ используется реальным вызывающим кодом (нет ни одного вызова consume/reply/set_bridge_enabled с message_id) — оставлено опциональным, без required"
     MarkConsumedSuccess:
       type: object
-      properties:
-        consumed: {} # MIGRATE-TODO: остаётся O (не выводимо) — mark_consumed(ref) (state.py:118-119) не
-          # возвращает значения (None); ни один вызывающий код не строит объект/поле "consumed" как результат
-          # операции. Булево/timestamp не подобран — не домысливаю.
+      description: "успех mark-consumed = void (mark_consumed возвращает None; успех = отсутствие исключения). owner-decision (14.07): поле consumed убрано — код его не строит."
     MarkConsumedFailure:
       type: object
       properties:
         error_class:
           type: string
           enum: [transient]
+    SendNoticeInput:
+      type: object
+      required: [subject, body]
+      properties:
+        subject:
+          type: string
+          description: "тема уведомления; from: mail_out.py:130-131 (send_notice(subject,...), msg['Subject']=subject)"
+        body:
+          type: string
+          description: "текст уведомления; from: mail_out.py:131 (msg.set_content(body))"
+    SendNoticeSuccess:
+      type: object
+      description: "успех = message_id отправленного письма (send_notice возвращает mid)."
+      properties:
+        message_id:
+          type: string
+          description: "from: mail_out.py:132 (return mid)"
