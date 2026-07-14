@@ -5,6 +5,8 @@ factory: mailtg-bridge
 status: draft
 owner: Евгений
 updated: 2026-07-12
+form: procedural
+produced_by: migrate
 ---
 # Алгоритм: деградация при превышении лимита размера письма
 

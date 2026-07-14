@@ -1,0 +1,192 @@
+# Машинный сайдкар (produced_by: migrate) к api-mailbox-imap-smtp.md.
+# Компаньон .md — источник истины (провенанс, маппинги полей, ограничения); этот файл — проекция
+# "Операции / события" + "Контракт" в AsyncAPI 2.x (природа контракта: SMTP produce / IMAP consume,
+# -> patterns/sidecar-formats.md). Типы полей, не имевшие явного логического типа в исходной прозе
+# компаньона, помечены "#" MIGRATE-TODO-комментарием рядом (YAML допускает "#"-комментарии) —
+# см. migration-report.md в корне фабрики за сквозной нумерацией.
+asyncapi: '2.6.0'
+info:
+  title: api-mailbox-imap-smtp
+  version: '0.1.0' # MIGRATE-TODO: версия контракта не зафиксирована в источнике (status: draft, не сертифицирован)
+  description: >-
+    Usage-контракт почтового аккаунта B (SMTP исходящее письмо / IMAP входящий опрос), как его
+    потребляет мост mailtg-bridge. Компаньон: api-mailbox-imap-smtp.md.
+channels:
+  send-mail:
+    description: >-
+      Отправить письмо (батч / подтверждение / уведомление) с ящика B на адрес U по SMTP.
+      Успех/отказ — см. components.schemas.SendMailSuccess / SendMailFailure (AsyncAPI не даёт
+      отдельного слота "ответ" для publish-операции; форма ответа зафиксирована схемой для
+      справки инструментов, семантика связки вход->исход — в компаньоне .md).
+    publish:
+      operationId: send-mail
+      message:
+        $ref: '#/components/messages/SendMailRequest'
+  poll-mail:
+    description: >-
+      Выбрать новые (не потреблённые) письма на ящике B по IMAP. Входные параметры такта
+      (mailbox=B, consumed_set) — сторона запроса поллинга, не выражаются в AsyncAPI subscribe
+      (subscribe не имеет слота "вход"); зафиксированы прозой в компаньоне .md, раздел "Контракт"
+      (перенесён туда историей до сайдкара — сверить с owner при human-gate).
+    subscribe:
+      operationId: poll-mail
+      message:
+        $ref: '#/components/messages/PolledMail'
+  mark-consumed:
+    description: >-
+      Зафиксировать письмо обработанным (не выбирать повторно).
+    publish:
+      operationId: mark-consumed
+      message:
+        $ref: '#/components/messages/MarkConsumedRequest'
+components:
+  messages:
+    SendMailRequest:
+      payload:
+        $ref: '#/components/schemas/SendMailInput'
+    PolledMail:
+      payload:
+        $ref: '#/components/schemas/PolledMailItem'
+    MarkConsumedRequest:
+      payload:
+        $ref: '#/components/schemas/MarkConsumedInput'
+  schemas:
+    SendMailInput:
+      type: object
+      required: [from, to, subject, message_id, html_body, text_body]
+      properties:
+        from:
+          type: string
+          format: email
+          description: "аккаунт-отправитель B; from: data-config.schema.json:16 (B_ADDRESS) + config.py:46 (b_address, validated by _email())"
+        to:
+          type: string
+          format: email
+          description: "адрес назначения U; from: data-config.schema.json:21 (U_ADDRESS) + config.py:49 (u_address, validated by _email())"
+        subject:
+          type: string
+          description: 'тег источника + название/тема; from: mail_out.py:71 (msg["Subject"]=base+... строка), :131 (send_notice(subject: str))'
+        message_id:
+          type: string
+          description: "устойчивый идентификатор письма, формат не указан (не UUID) — Message-ID-подобный"
+        in_reply_to:
+          type: string
+          description: "нет для нового bridged-письма (обязателен только для служебных ответов)"
+        html_body:
+          type: string
+          description: 'HTML-разметка письма; from: mail_out.py:65 (markup="<html><body>..."), :72 (msg.add_alternative(markup, subtype="html"))'
+        text_body:
+          type: string
+          description: 'текстовая часть письма; from: mail_out.py:65 (plain="\n\n".join(plain)), :72 (msg.set_content(plain or "Telegram update"))'
+        inline_images:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaAttachment'
+          description: "disposition inline-image -> dict-media-disposition; from: mail_out.py:60-63 (image branch), :77-79 (html_part.add_related)"
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaAttachment'
+          description: "disposition attached-file -> dict-media-disposition; from: mail_out.py:58-59,80 (elif dm.size<=threshold: msg.add_attachment)"
+        notices:
+          type: array
+          items: {} # MIGRATE-TODO: остаётся O (не выводимо, см. комментарий ниже)
+          # (а) BridgeService-уведомления (on/off, session-invalid) — каждое своим вызовом send_notice(subject,body),
+          #     отдельное письмо, НЕ элемент массива внутри батча (mail_out.py:130-132, orchestrator.py:102-107).
+          # (б) markers "notice-only" -> dict-media-disposition (oversized non-image) вписаны строками прямо в
+          #     html_body/text_body (mail_out.py:58-59), не собираются в отдельный массив.
+          # Ни одно чтение кода не даёт структуры элемента notices[] — не домысливаю.
+    MediaAttachment:
+      type: object
+      description: >-
+        Дескриптор одного скачанного медиа Telegram, как его потребляет cmp-email-out при сборке
+        письма (mail_out.py `_render`/`_message`; исходные dataclass `MediaRef`/`DownloadedMedia`
+        в domain.py). Диспозиция (inline vs attached) решается в момент сборки по content_type/size
+        против ATTACHMENT_THRESHOLD_BYTES (-> dict-media-disposition), отдельным полем не несётся.
+      properties:
+        filename:
+          type: string
+          description: "from: domain.py:64 (MediaRef.filename) + mail_out.py:75,79 (dm.ref.filename)"
+        content_type:
+          type: string
+          description: 'MIME-тип "maintype/subtype"; from: domain.py:65 (MediaRef.content_type) + mail_out.py:75'
+        size:
+          type: integer
+          description: "байты; from: domain.py:66,72 (MediaRef.size / DownloadedMedia.size) + mail_out.py:58,80 (dm.size)"
+    SendMailSuccess:
+      type: object
+      properties:
+        accepted: {} # MIGRATE-TODO: остаётся O (не выводимо) — в коде нет поля/переменной "accepted":
+          # SmtpMailer.send() (mail_out.py:100-113) не перехватывает и не сохраняет результат
+          # smtp.sendmail() (Python возвращает dict отклонённых адресатов — он отбрасывается); успех
+          # выражен только отсутствием исключения. Булево/статус не подобран — не домысливаю.
+        message_id:
+          type: string
+    SendMailFailure:
+      type: object
+      properties:
+        error_class:
+          type: string
+          enum: [transient, auth-failed, size-rejected]
+          description: "size-rejected предупреждается заранее деградацией (-> alg-oversize-degrade)"
+    PolledMailItem:
+      type: object
+      properties:
+        uid:
+          type: string
+          description: "идентификатор письма на ящике B — формат не указан"
+        from:
+          type: string
+          description: "адрес отправителя письма (lowercased); from: domain.py:117 (InboundMail.from_addr: str) + mail_in.py:95 (parseaddr(...)[1].lower())"
+        delivered_to:
+          type: array
+          items:
+            type: string
+          description: "адреса получателей (lowercased), объединение заголовков To/Delivered-To/X-Original-To; from: domain.py:118 (InboundMail.recipients: tuple[str,...]) + mail_in.py:92-93"
+        in_reply_to:
+          type: string
+        references:
+          type: array
+          items:
+            type: string
+          description: "список Message-ID (-> RFC 5322 References); from: domain.py:123 (InboundMail.references: tuple[str,...]) + mail_in.py:17-18,96 (message_ids(): re.findall на угловые Message-ID)"
+        subject:
+          type: string
+          description: 'from: domain.py:119 (InboundMail.subject: str) + mail_in.py:95 (decode_header_value(msg.get("Subject")))'
+        text_body:
+          type: string
+          description: "from: domain.py:120 (InboundMail.body_text: str) + mail_in.py:79-84,96 (extract_reply_text())"
+    PollMailFailure:
+      type: object
+      properties:
+        error_class:
+          type: string
+          enum: [transient, auth-failed]
+    MarkConsumedInput:
+      type: object
+      # from: orchestrator.py:79,87,97 (store.is_consumed(mail.mail_ref) / set_bridge_enabled(...,mail.mail_ref) /
+      # commit_reply(mail.mail_ref,...)) — реальный вызывающий код ВСЕГДА передаёт РОВНО mail_ref (IMAP UID-based,
+      # см. mail_in.py:124 f"INBOX:{uidv}:{uid.decode()}"), под ключом схемы "uid". state.py:118 mark_consumed(ref)
+      # нигде не вызывается с message_id (по grep src/ и tests/ — ни одного вызова потребления с message_id).
+      # XOR закрыт фактом, не домыслом: "message_id" в реальности не используется — required ограничен "uid";
+      # oneOf не синтезирую (это выражало бы альтернативный путь, которого в коде нет).
+      required: [uid]
+      properties:
+        uid:
+          type: string
+          description: 'mail_ref — IMAP UID-строка; from: mail_in.py:124 (f"INBOX:{uidv}:{uid.decode()}") + domain.py:116 (InboundMail.mail_ref: str)'
+        message_id:
+          type: string
+          description: "объявлено схемой, но НЕ используется реальным вызывающим кодом (нет ни одного вызова consume/reply/set_bridge_enabled с message_id) — оставлено опциональным, без required"
+    MarkConsumedSuccess:
+      type: object
+      properties:
+        consumed: {} # MIGRATE-TODO: остаётся O (не выводимо) — mark_consumed(ref) (state.py:118-119) не
+          # возвращает значения (None); ни один вызывающий код не строит объект/поле "consumed" как результат
+          # операции. Булево/timestamp не подобран — не домысливаю.
+    MarkConsumedFailure:
+      type: object
+      properties:
+        error_class:
+          type: string
+          enum: [transient]
