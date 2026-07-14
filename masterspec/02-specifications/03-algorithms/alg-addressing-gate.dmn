@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             id="alg-addressing-gate"
+             name="Гейт адресованности"
+             namespace="https://mailtg-bridge/spec/alg-addressing-gate">
+  <!-- Машинный сайдкар для alg-addressing-gate.md (form: decision-table). Провенанс наследуется
+       от компаньона; порядок правил = приоритетный каскад (hit policy FIRST). -->
+  <decision id="d-addressing-gate" name="Решение гейта адресованности">
+    <decisionTable id="dt-addressing-gate" hitPolicy="FIRST">
+      <input id="in-is-bot" label="is_bot">
+        <inputExpression id="ie-is-bot" typeRef="boolean"><text>is_bot</text></inputExpression>
+      </input>
+      <input id="in-bot-policy" label="bot_policy">
+        <inputExpression id="ie-bot-policy" typeRef="string"><text>bot_policy</text></inputExpression>
+      </input>
+      <input id="in-bot-in-list" label="bot_in_list">
+        <inputExpression id="ie-bot-in-list" typeRef="boolean"><text>bot_in_list</text></inputExpression>
+      </input>
+      <input id="in-source-type" label="source_type">
+        <inputExpression id="ie-source-type" typeRef="string"><text>source_type</text></inputExpression>
+      </input>
+      <input id="in-in-whitelist" label="in_whitelist">
+        <inputExpression id="ie-in-whitelist" typeRef="boolean"><text>in_whitelist</text></inputExpression>
+      </input>
+      <input id="in-mention-counted" label="mention_counted">
+        <inputExpression id="ie-mention-counted" typeRef="boolean"><text>mention_counted</text></inputExpression>
+      </input>
+      <output id="out-decision" label="decision" name="decision" typeRef="string"/>
+      <rule id="r1">
+        <inputEntry id="r1-1"><text>true</text></inputEntry>
+        <inputEntry id="r1-2"><text>"none"</text></inputEntry>
+        <inputEntry id="r1-3"><text>-</text></inputEntry>
+        <inputEntry id="r1-4"><text>-</text></inputEntry>
+        <inputEntry id="r1-5"><text>-</text></inputEntry>
+        <inputEntry id="r1-6"><text>-</text></inputEntry>
+        <outputEntry id="r1-o"><text>"отсеять"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <inputEntry id="r2-1"><text>true</text></inputEntry>
+        <inputEntry id="r2-2"><text>"selected"</text></inputEntry>
+        <inputEntry id="r2-3"><text>false</text></inputEntry>
+        <inputEntry id="r2-4"><text>-</text></inputEntry>
+        <inputEntry id="r2-5"><text>-</text></inputEntry>
+        <inputEntry id="r2-6"><text>-</text></inputEntry>
+        <outputEntry id="r2-o"><text>"отсеять"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <inputEntry id="r3-1"><text>-</text></inputEntry>
+        <inputEntry id="r3-2"><text>-</text></inputEntry>
+        <inputEntry id="r3-3"><text>-</text></inputEntry>
+        <inputEntry id="r3-4"><text>"dm"</text></inputEntry>
+        <inputEntry id="r3-5"><text>-</text></inputEntry>
+        <inputEntry id="r3-6"><text>-</text></inputEntry>
+        <outputEntry id="r3-o"><text>"пропустить"</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <inputEntry id="r4-1"><text>-</text></inputEntry>
+        <inputEntry id="r4-2"><text>-</text></inputEntry>
+        <inputEntry id="r4-3"><text>-</text></inputEntry>
+        <inputEntry id="r4-4"><text>not("dm")</text></inputEntry>
+        <inputEntry id="r4-5"><text>true</text></inputEntry>
+        <inputEntry id="r4-6"><text>-</text></inputEntry>
+        <outputEntry id="r4-o"><text>"пропустить"</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <inputEntry id="r5-1"><text>-</text></inputEntry>
+        <inputEntry id="r5-2"><text>-</text></inputEntry>
+        <inputEntry id="r5-3"><text>-</text></inputEntry>
+        <inputEntry id="r5-4"><text>not("dm")</text></inputEntry>
+        <inputEntry id="r5-5"><text>false</text></inputEntry>
+        <inputEntry id="r5-6"><text>true</text></inputEntry>
+        <outputEntry id="r5-o"><text>"пропустить"</text></outputEntry>
+      </rule>
+      <rule id="r6">
+        <inputEntry id="r6-1"><text>-</text></inputEntry>
+        <inputEntry id="r6-2"><text>-</text></inputEntry>
+        <inputEntry id="r6-3"><text>-</text></inputEntry>
+        <inputEntry id="r6-4"><text>not("dm")</text></inputEntry>
+        <inputEntry id="r6-5"><text>false</text></inputEntry>
+        <inputEntry id="r6-6"><text>false</text></inputEntry>
+        <outputEntry id="r6-o"><text>"отсеять"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

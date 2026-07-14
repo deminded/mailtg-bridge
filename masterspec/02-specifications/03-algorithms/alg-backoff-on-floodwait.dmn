@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             id="alg-backoff-on-floodwait"
+             name="Отступ при FloodWait и преходящих ошибках"
+             namespace="https://mailtg-bridge/spec/alg-backoff-on-floodwait">
+  <!-- Машинный сайдкар для alg-backoff-on-floodwait.md (form: decision-table). Провенанс наследуется
+       от компаньона. Выход — код реакции; человекочитаемое описание реакции — в таблице компаньона. -->
+  <decision id="d-backoff" name="Реакция на класс ошибки внешней стороны">
+    <decisionTable id="dt-backoff" hitPolicy="FIRST">
+      <input id="in-error-class" label="error_class">
+        <inputExpression id="ie-error-class" typeRef="string"><text>error_class</text></inputExpression>
+      </input>
+      <output id="out-reaction" label="reaction" name="reaction" typeRef="string"/>
+      <rule id="r1">
+        <inputEntry id="r1-1"><text>"FloodWait"</text></inputEntry>
+        <outputEntry id="r1-o"><text>"backoff-until-telegram-interval"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <inputEntry id="r2-1"><text>"transient"</text></inputEntry>
+        <outputEntry id="r2-o"><text>"backoff-min-interval-next-tick"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <inputEntry id="r3-1"><text>"session-invalid"</text></inputEntry>
+        <outputEntry id="r3-o"><text>"stop-and-session-invalid-alert"</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <inputEntry id="r4-1"><text>-</text></inputEntry>
+        <outputEntry id="r4-o"><text>"backoff-min-interval-next-tick"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>
