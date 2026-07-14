@@ -28,10 +28,10 @@ produced_by: migrate
 между ними (1–N курсор↔связка, курсор↔эхо, singleton-и) — в `description` соответствующего `$defs` в
 сайдкаре (перенесено дословно, без потери).
 
-<!-- MIGRATE-TODO: часть атрибутов Configuration не имела явного логического типа в исходной прозе
+<!-- Типы атрибутов Configuration заданы в сайдкаре с провенансом (config.py + -> data-config):
      (tg_access, B_imap/B_smtp {host,port,credentials}, whitelist/mention_list элементы,
      attachment_threshold/email_size_limit «размер», retention/collect_interval/send_interval
-     «длительность») — помечены "x-migrate-todo" в сайдкаре (JSON без #-комментариев). Детальный
+     «длительность») — все с явным типом в сайдкаре. Детальный
      типизированный контракт этих же параметров — в -> data-config (флоская config-схема); НЕ
      подставлен сюда автоматически (разные артефакты, migrate не обогащает содержание одного файла
      фактами другого) — см. migration-report.md за сквозной нумерацией. -->

@@ -125,7 +125,9 @@ date: 2026-07-13
     по ЭТОМУ API (аналог снятого ранее `.md-only`, но теперь предметно обоснованное), либо указывает
     конкретный стандарт, если он всё же существует и мне не известен.
 
-### data-bridge-store (14)
+### data-bridge-store (14) — ✅ ЗАКРЫТО 14.07.2026
+
+**Разрешение:** все 14 (#21–34) закрыты ИЗ ИСТОЧНИКА — `config.py` (Settings) + `-> data-config.schema.json`, без домысла. Типы и построчный провенанс (`from: config.py:NN + data-config.schema.json:NN`) — в `data-bridge-store.schema.json`. Ключевые разрешения: `tg_access` → объект {api_id:int, api_hash:str} (config.py:45); `B_imap/B_smtp` host:str, port:int (config.py:47-48); `credentials` → `$ref MailCredentials`; `whitelist`/`mention_list` элементы → `$ref SourceRef`; `attachment_threshold`/`email_size_limit` → байты, int (config.py:51-52); `collect_interval`/`send_interval` → секунды, int (config.py:52-53); `retention` — НЕ одно поле, а составной ярлык пяти раздельных Settings (config.py:55-57: retention_seconds/max_ledger/max_consumed/max_echo/echo_retention). Детектор формы (F3) на mailtg — зелёный. Ниже — исходный список как аудит того, что было открыто:
 
 21. **[data-bridge-store]** сайдкар `Configuration.tg_access` — тип не указан, legacy: `"tg_access
     (доступ Telegram)"` — нужен факт: что это структурно (флаг доступности? объект с токеном/session
